@@ -4,16 +4,11 @@ import DocumentList from "./components/DocumentList";
 import DocumentUpload from "./components/DocumentUpload";
 import { listDocuments } from "./api/client";
 
-/**
- * Componente raiz.
- * Gerencia estado global: lista de documentos e documento ativo.
- */
 export default function App() {
   const [documents, setDocuments] = useState([]);
   const [activeDoc, setActiveDoc] = useState(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
 
-  // Carrega documentos existentes ao abrir
   useEffect(() => {
     listDocuments()
       .then(setDocuments)
@@ -21,40 +16,41 @@ export default function App() {
       .finally(() => setIsLoadingDocs(false));
   }, []);
 
-  // Callback: novo upload realizado
   const handleUploaded = (doc) => {
     setDocuments((prev) => [doc, ...prev]);
     setActiveDoc(doc);
   };
 
-  // Callback: status de um documento foi atualizado (polling)
   const handleDocUpdate = (updatedDoc) => {
     setDocuments((prev) =>
       prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
     );
-    // Atualiza documento ativo se for o mesmo
-    if (activeDoc?.id === updatedDoc.id) {
-      setActiveDoc(updatedDoc);
-    }
+    if (activeDoc?.id === updatedDoc.id) setActiveDoc(updatedDoc);
   };
 
   return (
     <div className="app-layout">
-      {/* Sidebar */}
+      {/* ── Sidebar ── */}
       <aside className="sidebar">
-        <div className="sidebar-header">
-          <h1>📚 RAG Pipeline</h1>
-          <p>Upload de documentos e Q&A com IA</p>
+        {/* Logo */}
+        <div className="sidebar-logo">
+          <div className="logo-mark">📜</div>
+          <div className="logo-text">
+            <h1>Papyrus</h1>
+            <p>Converse com seus documentos</p>
+          </div>
         </div>
 
-        <DocumentUpload onUploaded={handleUploaded} />
+        {/* Upload */}
+        <div className="upload-section">
+          <DocumentUpload onUploaded={handleUploaded} />
+        </div>
 
+        {/* Lista */}
         {isLoadingDocs ? (
-          <div style={{ padding: "16px", display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ padding: "14px 16px", display: "flex", gap: 8, alignItems: "center" }}>
             <div className="spinner" />
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-              Carregando...
-            </span>
+            <span style={{ fontSize: 12, color: "var(--text-3)" }}>Carregando...</span>
           </div>
         ) : (
           <DocumentList
@@ -66,7 +62,7 @@ export default function App() {
         )}
       </aside>
 
-      {/* Área principal: chat */}
+      {/* ── Chat ── */}
       <main className="main-area">
         <ChatInterface activeDoc={activeDoc} />
       </main>

@@ -1,31 +1,16 @@
 import { useEffect } from "react";
 import { getDocumentStatus } from "../api/client";
 
-const STATUS_BADGE = {
+const STATUS = {
   pending:    { label: "Aguardando", cls: "badge-pending" },
   processing: { label: "Processando", cls: "badge-processing" },
-  done:       { label: "Pronto", cls: "badge-done" },
-  error:      { label: "Erro", cls: "badge-error" },
+  done:       { label: "Pronto",      cls: "badge-done" },
+  error:      { label: "Erro",        cls: "badge-error" },
 };
 
-const FILE_ICON = {
-  pdf: "📕",
-  docx: "📘",
-};
-
-/**
- * Lista de documentos na sidebar.
- * Faz polling para documentos com status pending/processing.
- *
- * Props:
- *  documents     — array de documentos
- *  activeDocId   — ID do documento selecionado (para highlight)
- *  onSelect(doc) — chamado ao clicar num documento
- *  onUpdate(doc) — chamado quando o status de um documento muda
- */
 export default function DocumentList({ documents, activeDocId, onSelect, onUpdate }) {
 
-  // Polling: para documentos em processamento, verifica o status a cada 3s
+  // Polling a cada 3s para docs em processamento
   useEffect(() => {
     const processing = documents.filter(
       (d) => d.status === "pending" || d.status === "processing"
@@ -36,12 +21,8 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
       for (const doc of processing) {
         try {
           const updated = await getDocumentStatus(doc.id);
-          if (updated.status !== doc.status) {
-            onUpdate({ ...doc, ...updated });
-          }
-        } catch {
-          // silencioso
-        }
+          if (updated.status !== doc.status) onUpdate({ ...doc, ...updated });
+        } catch { /* silencioso */ }
       }
     }, 3000);
 
@@ -51,9 +32,9 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
   if (documents.length === 0) {
     return (
       <div className="doc-list">
-        <h3>Documentos</h3>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 4px" }}>
-          Nenhum documento ainda. Envie um arquivo acima.
+        <div className="doc-list-label">Documentos</div>
+        <p className="doc-empty">
+          Nenhum documento ainda.<br />Envie um arquivo acima para começar.
         </p>
       </div>
     );
@@ -61,14 +42,15 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
 
   return (
     <div className="doc-list">
-      <h3>Documentos ({documents.length})</h3>
+      <div className="doc-list-label">Documentos · {documents.length}</div>
 
       {documents.map((doc) => {
         const ext = doc.filename.split(".").pop().toLowerCase();
-        const icon = FILE_ICON[ext] || "📄";
-        const badge = STATUS_BADGE[doc.status] || STATUS_BADGE.pending;
         const isActive = doc.id === activeDocId;
         const isProcessing = doc.status === "pending" || doc.status === "processing";
+        const badge = STATUS[doc.status] || STATUS.pending;
+
+        const icon = ext === "pdf" ? "📕" : "📘";
 
         return (
           <div
@@ -77,19 +59,22 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
             onClick={() => onSelect(doc)}
             title={doc.filename}
           >
-            <span className="doc-icon">{icon}</span>
+            {/* Thumbnail */}
+            <div className={`doc-thumb ${ext}`}>{icon}</div>
 
+            {/* Info */}
             <div className="doc-info">
               <div className="doc-name">{doc.filename}</div>
               <div className="doc-meta">
                 {doc.status === "done"
-                  ? `${doc.total_chunks} chunks`
+                  ? `${doc.total_chunks} trechos indexados`
                   : doc.status === "error"
                   ? "Erro no processamento"
-                  : "Processando..."}
+                  : "Indexando..."}
               </div>
             </div>
 
+            {/* Status */}
             {isProcessing
               ? <div className="spinner" />
               : <span className={`badge ${badge.cls}`}>{badge.label}</span>

@@ -4,6 +4,8 @@ from app.services.document_processor import (
     DocumentProcessingService,
 )
 from app.services.document_repository import DocumentRepository, ChunkRepository
+from app.services.embedding_service import EmbeddingService, get_embedding_service
+from app.services.search_service import SearchService, SearchResult
 
 __all__ = [
     "DocumentParser",
@@ -11,4 +13,8 @@ __all__ = [
     "DocumentProcessingService",
     "DocumentRepository",
     "ChunkRepository",
+    "EmbeddingService",
+    "get_embedding_service",
+    "SearchService",
+    "SearchResult",
 ]

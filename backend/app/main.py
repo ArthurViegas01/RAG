@@ -5,7 +5,7 @@ Entry point da aplicação FastAPI.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import documents_router
+from app.api import documents_router, search_router, chat_router
 from app.config import settings
 from app.database import init_db
 
@@ -26,6 +26,8 @@ app.add_middleware(
 
 # Registra routers
 app.include_router(documents_router)
+app.include_router(search_router)
+app.include_router(chat_router)
 
 
 @app.on_event("startup")

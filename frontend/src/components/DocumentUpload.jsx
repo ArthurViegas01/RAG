@@ -1,13 +1,6 @@
 import { useRef, useState } from "react";
 import { uploadDocument } from "../api/client";
 
-/**
- * Componente de upload de documentos.
- * Suporta clique e drag-and-drop.
- *
- * Props:
- *  onUploaded(doc) — chamado após upload bem-sucedido
- */
 export default function DocumentUpload({ onUploaded }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -16,16 +9,13 @@ export default function DocumentUpload({ onUploaded }) {
 
   const handleFile = async (file) => {
     if (!file) return;
-
     const ext = file.name.split(".").pop().toLowerCase();
     if (!["pdf", "docx"].includes(ext)) {
-      setError("Formato inválido. Aceitos: PDF, DOCX");
+      setError("Formato inválido. Aceitos: PDF ou DOCX");
       return;
     }
-
     setError(null);
     setIsUploading(true);
-
     try {
       const doc = await uploadDocument(file);
       onUploaded(doc);
@@ -33,7 +23,6 @@ export default function DocumentUpload({ onUploaded }) {
       setError(err.message);
     } finally {
       setIsUploading(false);
-      // Reset input para permitir re-upload do mesmo arquivo
       if (inputRef.current) inputRef.current.value = "";
     }
   };
@@ -41,12 +30,11 @@ export default function DocumentUpload({ onUploaded }) {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    handleFile(file);
+    handleFile(e.dataTransfer.files[0]);
   };
 
   return (
-    <div style={{ padding: "12px 12px 0" }}>
+    <>
       <label
         className={`upload-zone ${isDragOver ? "drag-over" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
@@ -63,27 +51,29 @@ export default function DocumentUpload({ onUploaded }) {
 
         {isUploading ? (
           <>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-              <div className="spinner" style={{ width: 20, height: 20 }} />
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+              <div className="spinner" style={{ width: 22, height: 22 }} />
             </div>
-            <p>Enviando...</p>
+            <p>Enviando documento...</p>
           </>
         ) : (
           <>
-            <div className="upload-icon">📄</div>
+            <div className="upload-icon-wrap">
+              {isDragOver ? "📂" : "📄"}
+            </div>
             <p>
               <strong>Clique para enviar</strong> ou arraste aqui
             </p>
-            <p className="upload-types">PDF · DOCX · até 50MB</p>
+            <p className="upload-types">PDF · DOCX · máx 50 MB</p>
           </>
         )}
       </label>
 
       {error && (
-        <p style={{ color: "var(--error)", fontSize: 12, padding: "4px 4px 0" }}>
-          ⚠ {error}
-        </p>
+        <div className="upload-error">
+          <span>⚠</span> {error}
+        </div>
       )}
-    </div>
+    </>
   );
 }

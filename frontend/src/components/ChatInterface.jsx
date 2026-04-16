@@ -2,13 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { chat } from "../api/client";
 
-/**
- * Interface de chat com RAG.
- * Recebe uma pergunta, chama o backend e exibe a resposta com citações.
- *
- * Props:
- *  activeDoc — documento selecionado (pode ser null para busca em todos)
- */
 export default function ChatInterface({ activeDoc }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -16,7 +9,6 @@ export default function ChatInterface({ activeDoc }) {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Scroll para o fim quando novas mensagens chegam
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -25,98 +17,120 @@ export default function ChatInterface({ activeDoc }) {
     const question = input.trim();
     if (!question || isLoading) return;
 
-    // Adiciona mensagem do usuário
-    const userMsg = { role: "user", content: question };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { role: "user", content: question }]);
     setInput("");
     setIsLoading(true);
 
     try {
       const docId = activeDoc?.status === "done" ? activeDoc.id : null;
       const response = await chat(question, docId);
-
-      const assistantMsg = {
-        role: "assistant",
-        content: response.answer,
-        citations: response.citations || [],
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: response.answer, citations: response.citations || [] },
+      ]);
     } catch (err) {
-      const errorMsg = {
-        role: "assistant",
-        content: `⚠️ Erro: ${err.message}`,
-        isError: true,
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `⚠️ ${err.message}`, isError: true },
+      ]);
     } finally {
       setIsLoading(false);
-      // Re-foca no input após resposta
       setTimeout(() => textareaRef.current?.focus(), 50);
     }
   };
 
   const handleKeyDown = (e) => {
-    // Enter envia; Shift+Enter quebra linha
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
-  const hasActiveDocs = activeDoc?.status === "done";
-  const placeholder = hasActiveDocs
-    ? `Pergunte sobre "${activeDoc.filename}"...`
-    : "Selecione um documento pronto para perguntar...";
+  const hasReady = activeDoc?.status === "done";
+
+  /* ── Header ── */
+  const renderHeader = () => (
+    <div className="chat-header">
+      <div className="chat-header-icon">
+        {activeDoc ? (activeDoc.filename.endsWith(".pdf") ? "📕" : "📘") : "📜"}
+      </div>
+      <div className="chat-header-info">
+        <h2>
+          {activeDoc ? activeDoc.filename : "Papyrus Assistant"}
+        </h2>
+        <p>
+          {activeDoc
+            ? activeDoc.status === "done"
+              ? `${activeDoc.total_chunks} trechos indexados · pronto para perguntas`
+              : activeDoc.status === "error"
+              ? "Erro ao indexar este documento"
+              : "Indexando documento, aguarde..."
+            : "Selecione um documento na barra lateral"}
+        </p>
+      </div>
+      {hasReady && (
+        <span className="chat-header-badge">● Online</span>
+      )}
+    </div>
+  );
+
+  /* ── Empty ── */
+  const renderEmpty = () => (
+    <div className="empty-state">
+      <div className="empty-illustration">
+        <div className="empty-circle">📜</div>
+        <div className="empty-dot">✦</div>
+      </div>
+      <h3>
+        {hasReady
+          ? `Pergunte sobre "${activeDoc.filename}"`
+          : "Carregue um documento"}
+      </h3>
+      <p>
+        {hasReady
+          ? "O Papyrus vai buscar os trechos mais relevantes e responder com base no conteúdo do documento."
+          : "Envie um PDF ou DOCX, aguarde a indexação e faça perguntas em linguagem natural."}
+      </p>
+      {!hasReady && (
+        <div className="empty-steps">
+          <div className="empty-step">
+            <span className="empty-step-num">1</span> Enviar documento
+          </div>
+          <div className="empty-step">
+            <span className="empty-step-num">2</span> Aguardar indexação
+          </div>
+          <div className="empty-step">
+            <span className="empty-step-num">3</span> Fazer perguntas
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
-      {/* Header */}
-      <div className="chat-header">
-        <span style={{ fontSize: 22 }}>🤖</span>
-        <div>
-          <h2>RAG Assistant</h2>
-          <p>
-            {activeDoc
-              ? activeDoc.status === "done"
-                ? `${activeDoc.total_chunks} chunks indexados de "${activeDoc.filename}"`
-                : `"${activeDoc.filename}" ainda está processando...`
-              : "Envie e selecione um documento para começar"}
-          </p>
-        </div>
-      </div>
+      {renderHeader()}
 
       {/* Mensagens */}
       <div className="chat-messages">
-        {messages.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-icon">💬</div>
-            <h3>Nenhuma conversa ainda</h3>
-            <p>
-              {hasActiveDocs
-                ? `Faça uma pergunta sobre "${activeDoc.filename}" e o sistema buscará os trechos mais relevantes para responder.`
-                : "Envie um documento PDF ou DOCX na barra lateral, aguarde o processamento e faça perguntas."}
-            </p>
-          </div>
-        )}
+        {messages.length === 0 && renderEmpty()}
 
         {messages.map((msg, i) => (
           <div key={i} className={`message ${msg.role}`}>
             <div className="message-avatar">
-              {msg.role === "user" ? "🧑" : "🤖"}
+              {msg.role === "user" ? "🧑" : "📜"}
             </div>
             <div className="message-body">
-              {msg.role === "assistant" ? (
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
-              ) : (
-                <p>{msg.content}</p>
-              )}
-
-              {/* Citações de fontes */}
-              {msg.citations && msg.citations.length > 0 && (
+              {msg.role === "assistant"
+                ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+                : <p>{msg.content}</p>
+              }
+              {msg.citations?.length > 0 && (
                 <div className="citations">
+                  <span className="citations-label">Fontes</span>
                   {msg.citations.map((c, j) => (
                     <span key={j} className="citation" title={c.content}>
-                      📎 {c.source} · chunk {c.chunk_index}
+                      📎 {c.source} · trecho {c.chunk_index + 1}
                     </span>
                   ))}
                 </div>
@@ -125,10 +139,9 @@ export default function ChatInterface({ activeDoc }) {
           </div>
         ))}
 
-        {/* Indicador de "pensando" */}
         {isLoading && (
           <div className="message assistant">
-            <div className="message-avatar">🤖</div>
+            <div className="message-avatar">📜</div>
             <div className="message-body">
               <div className="thinking">
                 <span /><span /><span />
@@ -136,7 +149,6 @@ export default function ChatInterface({ activeDoc }) {
             </div>
           </div>
         )}
-
         <div ref={messagesEndRef} />
       </div>
 
@@ -147,12 +159,15 @@ export default function ChatInterface({ activeDoc }) {
             ref={textareaRef}
             className="chat-input"
             rows={1}
-            placeholder={placeholder}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isLoading || !hasActiveDocs}
-            style={{ height: "auto" }}
+            disabled={isLoading || !hasReady}
+            placeholder={
+              hasReady
+                ? `Pergunte sobre "${activeDoc.filename}"...`
+                : "Selecione um documento indexado para perguntar..."
+            }
             onInput={(e) => {
               e.target.style.height = "auto";
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
@@ -161,14 +176,12 @@ export default function ChatInterface({ activeDoc }) {
           <button
             className="send-btn"
             onClick={handleSend}
-            disabled={!input.trim() || isLoading || !hasActiveDocs}
+            disabled={!input.trim() || isLoading || !hasReady}
           >
             ↑
           </button>
         </div>
-        <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, textAlign: "center" }}>
-          Enter para enviar · Shift+Enter para nova linha
-        </p>
+        <p className="chat-hint">Enter para enviar · Shift+Enter para nova linha</p>
       </div>
     </>
   );

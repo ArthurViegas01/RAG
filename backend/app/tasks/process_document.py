@@ -15,6 +15,7 @@ from app.services import (
     DocumentRepository,
     DocumentProcessingService,
 )
+from app.services.embedding_service import get_embedding_service
 
 
 # Session factory para tasks Celery
@@ -66,10 +67,21 @@ async def _process_document_async(document_id: UUID) -> dict:
             if not chunks_text:
                 raise ValueError(f"Nenhum chunk foi gerado para: {doc.filename}")
 
-            # 4. Salvar chunks no banco
+            # 4. Salvar chunks no banco (sem embeddings ainda)
             chunks = await ChunkRepository.create_many(db, document_id, chunks_text)
 
-            # 5. Marcar como DONE
+            # 5. Gerar embeddings em batch (muito mais eficiente que um por um)
+            print(f"[Task] Gerando embeddings para {len(chunks)} chunks...")
+            embedding_service = get_embedding_service()
+            vectors = embedding_service.embed_batch(chunks_text)
+
+            # 6. Salvar embeddings nos chunks
+            for chunk, vector in zip(chunks, vectors):
+                await ChunkRepository.update_embedding(db, chunk.id, vector)
+
+            print(f"[Task] Embeddings gerados e salvos.")
+
+            # 7. Marcar como DONE
             await DocumentRepository.update_on_success(db, document_id, len(chunks))
 
             return {
