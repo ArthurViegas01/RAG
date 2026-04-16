@@ -262,6 +262,38 @@ body {
   line-height: 1.6;
 }
 
+.doc-delete-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.doc-delete-btn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: var(--red);
+}
+
+/* Variante laranja: cancela task em andamento */
+.doc-delete-btn--cancel {
+  color: #f59e0b;
+}
+.doc-delete-btn--cancel:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
 /* ─── Main Area ─────────────────────────────────────── */
 .main-area {
   flex: 1;

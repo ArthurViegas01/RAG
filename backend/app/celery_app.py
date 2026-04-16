@@ -24,4 +24,6 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    worker_log_format="%(asctime)s %(levelname)-8s %(message)s",
+    worker_task_log_format="%(asctime)s %(levelname)-8s %(message)s",
 )

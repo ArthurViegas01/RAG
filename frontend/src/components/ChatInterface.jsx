@@ -1,13 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react"; // useState usado para input e isLoading
 import ReactMarkdown from "react-markdown";
 import { chat } from "../api/client";
 
-export default function ChatInterface({ activeDoc }) {
-  const [messages, setMessages] = useState([]);
+export default function ChatInterface({ activeDoc, messages, onMessagesChange }) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Ref sempre atualizado com o valor mais recente de messages.
+  // Necessário para evitar stale closure em handleSend (função async):
+  // sem o ref, o segundo setMessages (resposta do assistente) usaria o
+  // valor de `messages` capturado no início da chamada, apagando o
+  // user message que foi adicionado no primeiro setMessages.
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Wrapper que propaga atualizações ao pai (App.jsx)
+  const setMessages = (updater) => {
+    const next = typeof updater === "function" ? updater(messagesRef.current) : updater;
+    onMessagesChange(next);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

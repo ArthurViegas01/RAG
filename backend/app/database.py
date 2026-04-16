@@ -49,6 +49,10 @@ async def init_db():
         # Habilita pgvector — necessário antes de criar colunas do tipo vector
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
+        # Adiciona colunas novas de forma idempotente (não recria a tabela)
+        await conn.execute(text(
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS celery_task_id VARCHAR(255)"
+        ))
 
 
 async def drop_db():

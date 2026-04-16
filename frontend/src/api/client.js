@@ -40,6 +40,15 @@ export async function listDocuments() {
 }
 
 /**
+ * Deleta um documento e seus chunks
+ * @param {string} docId
+ */
+export async function deleteDocument(docId) {
+  const res = await fetch(`${BASE_URL}/documents/${docId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Erro ao deletar documento");
+}
+
+/**
  * Busca o status de processamento de um documento
  * @param {string} docId
  * @returns {Promise<{status, total_chunks, error_message, ...}>}

@@ -8,6 +8,7 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [activeDoc, setActiveDoc] = useState(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+  const [chatHistories, setChatHistories] = useState({});
 
   useEffect(() => {
     listDocuments()
@@ -26,6 +27,21 @@ export default function App() {
       prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
     );
     if (activeDoc?.id === updatedDoc.id) setActiveDoc(updatedDoc);
+  };
+
+  const handleDocDelete = (docId) => {
+    setDocuments((prev) => prev.filter((d) => d.id !== docId));
+    if (activeDoc?.id === docId) setActiveDoc(null);
+    // Limpa o histórico do documento deletado
+    setChatHistories((prev) => {
+      const next = { ...prev };
+      delete next[docId];
+      return next;
+    });
+  };
+
+  const handleMessagesChange = (docId, messages) => {
+    setChatHistories((prev) => ({ ...prev, [docId]: messages }));
   };
 
   return (
@@ -58,13 +74,18 @@ export default function App() {
             activeDocId={activeDoc?.id}
             onSelect={setActiveDoc}
             onUpdate={handleDocUpdate}
+            onDelete={handleDocDelete}
           />
         )}
       </aside>
 
       {/* ── Chat ── */}
       <main className="main-area">
-        <ChatInterface activeDoc={activeDoc} />
+        <ChatInterface
+          activeDoc={activeDoc}
+          messages={chatHistories[activeDoc?.id] ?? []}
+          onMessagesChange={(msgs) => activeDoc && handleMessagesChange(activeDoc.id, msgs)}
+        />
       </main>
     </div>
   );

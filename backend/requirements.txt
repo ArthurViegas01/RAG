@@ -5,7 +5,8 @@ python-multipart==0.0.19    # Upload de arquivos
 
 # === Database ===
 sqlalchemy[asyncio]==2.0.36
-asyncpg==0.30.0             # Driver async para PostgreSQL
+asyncpg==0.30.0             # Driver async para PostgreSQL (FastAPI)
+psycopg2-binary==2.9.9      # Driver síncrono para PostgreSQL (Celery tasks)
 pgvector==0.3.6             # Suporte a vetores no SQLAlchemy
 alembic==1.14.1             # Migrations
 

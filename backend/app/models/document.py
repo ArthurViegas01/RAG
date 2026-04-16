@@ -40,6 +40,7 @@ class Document(Base):
     # Metadata de processamento
     total_chunks = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
+    celery_task_id = Column(String(255), nullable=True)  # ID da task Celery (para cancelamento)
 
     # Timestamps
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

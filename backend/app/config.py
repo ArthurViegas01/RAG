@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Chunking
     chunk_size: int = 512
     chunk_overlap: int = 50
+    max_chunks_per_doc: int = 300   # Limita chunks por documento (evita travar em PDFs gigantes)
 
     # Upload
     upload_dir: str = "./uploads"

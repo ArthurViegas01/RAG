@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_app import celery_app
 from app.config import settings
 from app.database import get_db
 from app.models import DocumentStatus
@@ -80,7 +81,12 @@ async def upload_document(
     )
 
     # Enfileirar task Celery para processar em background
-    process_document.delay(str(doc.id))
+    task = process_document.delay(str(doc.id))
+
+    # Salva o task_id para permitir cancelamento posterior
+    doc.celery_task_id = task.id
+    await db.commit()
+    await db.refresh(doc)
 
     return DocumentResponse.model_validate(doc)
 
@@ -172,3 +178,39 @@ async def get_document_status(
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
     }
+
+
+@router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Deleta um documento e todos os seus chunks.
+    Remove também o arquivo do filesystem.
+
+    Raises:
+        HTTPException: 404 se documento não encontrado
+    """
+    doc = await DocumentRepository.get_by_id(db, doc_id)
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Documento não encontrado: {doc_id}",
+        )
+
+    # Tenta revogar a task Celery (caso ainda esteja em execução)
+    if doc.celery_task_id:
+        try:
+            celery_app.control.revoke(doc.celery_task_id, terminate=True, signal="SIGTERM")
+        except Exception:
+            pass  # Não falha o delete se a revogação não funcionar
+
+    # Remove o arquivo do disco
+    if doc.file_path and os.path.exists(doc.file_path):
+        os.remove(doc.file_path)
+
+    # Remove do banco (cascade deleta os chunks automaticamente)
+    await db.delete(doc)
+    await db.commit()

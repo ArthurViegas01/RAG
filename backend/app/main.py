@@ -2,12 +2,18 @@
 Entry point da aplicação FastAPI.
 """
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import update
 
 from app.api import documents_router, search_router, chat_router
 from app.config import settings
-from app.database import init_db
+from app.database import AsyncSessionLocal, init_db
+from app.models import Document, DocumentStatus
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="RAG Pipeline API",
@@ -33,8 +39,35 @@ app.include_router(chat_router)
 @app.on_event("startup")
 async def startup_event():
     """Executado ao iniciar a aplicação."""
-    # Cria as tabelas no banco de dados se não existirem
     await init_db()
+    await _reset_stuck_documents()
+
+
+async def _reset_stuck_documents():
+    """
+    Ao reiniciar o servidor, documentos em PENDING ou PROCESSING ficam
+    presos para sempre (a task Celery foi perdida). Marca-os como ERROR
+    para o usuário saber que precisa reenviar.
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            update(Document)
+            .where(Document.status.in_([DocumentStatus.PENDING, DocumentStatus.PROCESSING]))
+            .values(
+                status=DocumentStatus.ERROR,
+                error_message="Processamento interrompido pelo reinício do servidor. Envie o arquivo novamente.",
+            )
+            .returning(Document.id, Document.filename)
+        )
+        rows = result.fetchall()
+        await db.commit()
+
+    if rows:
+        logger.warning(
+            "[Startup] %d documento(s) travado(s) marcado(s) como ERROR: %s",
+            len(rows),
+            [r.filename for r in rows],
+        )
 
 
 @app.get("/health")

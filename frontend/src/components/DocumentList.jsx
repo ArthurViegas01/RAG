@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { getDocumentStatus } from "../api/client";
+import { useEffect, useState } from "react";
+import { deleteDocument, getDocumentStatus } from "../api/client";
 
 const STATUS = {
   pending:    { label: "Aguardando", cls: "badge-pending" },
@@ -8,7 +8,9 @@ const STATUS = {
   error:      { label: "Erro",        cls: "badge-error" },
 };
 
-export default function DocumentList({ documents, activeDocId, onSelect, onUpdate }) {
+export default function DocumentList({ documents, activeDocId, onSelect, onUpdate, onDelete }) {
+  const [deletingId, setDeletingId] = useState(null);
+  const [hoveredId, setHoveredId] = useState(null);
 
   // Polling a cada 3s para docs em processamento
   useEffect(() => {
@@ -29,6 +31,20 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
     return () => clearInterval(interval);
   }, [documents]);
 
+  const handleDelete = async (e, doc) => {
+    e.stopPropagation(); // não seleciona o doc ao clicar no delete
+    if (deletingId) return;
+    setDeletingId(doc.id);
+    try {
+      await deleteDocument(doc.id);
+      onDelete(doc.id);
+    } catch (err) {
+      console.error("Erro ao deletar:", err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (documents.length === 0) {
     return (
       <div className="doc-list">
@@ -48,21 +64,22 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
         const ext = doc.filename.split(".").pop().toLowerCase();
         const isActive = doc.id === activeDocId;
         const isProcessing = doc.status === "pending" || doc.status === "processing";
+        const isDeleting = deletingId === doc.id;
+        const isHovered = hoveredId === doc.id;
         const badge = STATUS[doc.status] || STATUS.pending;
-
         const icon = ext === "pdf" ? "📕" : "📘";
 
         return (
           <div
             key={doc.id}
             className={`doc-item ${isActive ? "active" : ""}`}
-            onClick={() => onSelect(doc)}
+            onClick={() => !isDeleting && onSelect(doc)}
+            onMouseEnter={() => setHoveredId(doc.id)}
+            onMouseLeave={() => setHoveredId(null)}
             title={doc.filename}
           >
-            {/* Thumbnail */}
             <div className={`doc-thumb ${ext}`}>{icon}</div>
 
-            {/* Info */}
             <div className="doc-info">
               <div className="doc-name">{doc.filename}</div>
               <div className="doc-meta">
@@ -74,11 +91,32 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
               </div>
             </div>
 
-            {/* Status */}
-            {isProcessing
-              ? <div className="spinner" />
-              : <span className={`badge ${badge.cls}`}>{badge.label}</span>
-            }
+            {/* Spinner + botão de delete lado a lado durante processamento */}
+            {isDeleting ? (
+              <div className="spinner" />
+            ) : isProcessing ? (
+              isHovered || isActive ? (
+                <button
+                  className="doc-delete-btn doc-delete-btn--cancel"
+                  onClick={(e) => handleDelete(e, doc)}
+                  title="Cancelar e deletar"
+                >
+                  ✕
+                </button>
+              ) : (
+                <div className="spinner" />
+              )
+            ) : isHovered || isActive ? (
+              <button
+                className="doc-delete-btn"
+                onClick={(e) => handleDelete(e, doc)}
+                title="Deletar documento"
+              >
+                ✕
+              </button>
+            ) : (
+              <span className={`badge ${badge.cls}`}>{badge.label}</span>
+            )}
           </div>
         );
       })}
