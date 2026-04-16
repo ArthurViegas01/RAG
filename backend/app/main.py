@@ -5,7 +5,9 @@ Entry point da aplicação FastAPI.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import documents_router
 from app.config import settings
+from app.database import init_db
 
 app = FastAPI(
     title="RAG Pipeline API",
@@ -21,6 +23,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Registra routers
+app.include_router(documents_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Executado ao iniciar a aplicação."""
+    # Cria as tabelas no banco de dados se não existirem
+    await init_db()
 
 
 @app.get("/health")

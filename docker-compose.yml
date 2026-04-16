@@ -3,8 +3,6 @@ version: "3.8"
 services:
   # ============================================
   # PostgreSQL + pgvector
-  # Banco de dados principal: armazena documentos,
-  # chunks e embeddings (vetores)
   # ============================================
   db:
     image: pgvector/pgvector:pg16
@@ -24,8 +22,7 @@ services:
       retries: 5
 
   # ============================================
-  # Redis
-  # Message broker para Celery (fila de tarefas)
+  # Redis — broker do Celery
   # ============================================
   redis:
     image: redis:7-alpine
@@ -39,6 +36,68 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # ============================================
+  # FastAPI Backend
+  # ============================================
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-raguser}:${POSTGRES_PASSWORD:-ragpass123}@db:5432/${POSTGRES_DB:-ragdb}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+
+  # ============================================
+  # Celery Worker
+  # ============================================
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: rag-worker
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-raguser}:${POSTGRES_PASSWORD:-ragpass123}@db:5432/${POSTGRES_DB:-ragdb}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+
+  # ============================================
+  # Frontend React (Vite)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   pgdata:
