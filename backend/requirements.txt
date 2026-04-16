@@ -1,0 +1,34 @@
+# === Web Framework ===
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.19    # Upload de arquivos
+
+# === Database ===
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0             # Driver async para PostgreSQL
+pgvector==0.3.6             # Suporte a vetores no SQLAlchemy
+alembic==1.14.1             # Migrations
+
+# === Task Queue ===
+celery[redis]==5.4.0
+redis==5.2.1
+
+# === Document Processing ===
+pymupdf==1.25.3             # Parser de PDF (fitz)
+python-docx==1.1.2          # Parser de DOCX
+
+# === AI / Embeddings ===
+sentence-transformers==3.3.1  # Embeddings locais
+langchain-text-splitters==0.3.4  # Chunking inteligente
+
+# === LLM ===
+httpx==0.28.1               # Client HTTP async (para Ollama API)
+
+# === Config ===
+pydantic-settings==2.7.1    # Settings via .env
+python-dotenv==1.0.1
+
+# === Testing ===
+pytest==8.3.4
+pytest-asyncio==0.25.0
+httpx==0.28.1               # TestClient async
