@@ -19,9 +19,25 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimension: int = 384
 
-    # Ollama (LLM)
+    # LLM Provider: "ollama" (local) | "groq" | "openai"
+    llm_provider: str = "ollama"
+
+    # Ollama (local dev)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
+
+    # Groq (produção — gratuito, https://console.groq.com)
+    groq_api_key: str = ""
+    groq_model: str = "llama3-8b-8192"
+
+    # OpenAI (alternativa)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
+
+    # CORS — separar múltiplas origens por vírgula
+    # Ex: "http://localhost:5173,https://contextrag.netlify.app"
+    cors_origins: str = "http://localhost:5173"
 
     # Chunking
     chunk_size: int = 800           # Maior = mais contexto por chunk (melhor para livros)

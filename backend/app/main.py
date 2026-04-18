@@ -22,10 +22,11 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS — permite o frontend React se conectar
+# CORS — origens configuradas via CORS_ORIGINS (separadas por vírgula)
+_cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
