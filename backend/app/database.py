@@ -10,8 +10,9 @@ from app.config import settings
 from app.models import Base
 
 # Engine assíncrono para PostgreSQL
+# Usa async_database_url para garantir driver asyncpg (Railway injeta "postgresql://")
 engine = create_async_engine(
-    settings.database_url,
+    settings.async_database_url,
     echo=False,  # Mude para True para ver SQL queries (debug)
     pool_pre_ping=True,  # Valida conexões antes de usar
 )

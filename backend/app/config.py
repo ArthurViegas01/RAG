@@ -8,7 +8,18 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database
+    # Railway injeta DATABASE_URL como "postgresql://..." — convertemos para asyncpg automaticamente
     database_url: str = "postgresql+asyncpg://raguser:ragpass123@localhost:5432/ragdb"
+
+    @property
+    def async_database_url(self) -> str:
+        """Garante que a URL use o driver asyncpg, independente do formato injetado."""
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        return url
 
     # Redis / Celery
     redis_url: str = "redis://localhost:6379/0"
