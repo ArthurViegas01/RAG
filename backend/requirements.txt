@@ -19,7 +19,6 @@ pymupdf==1.25.3             # Parser de PDF (fitz)
 python-docx==1.1.2          # Parser de DOCX
 
 # === AI / Embeddings ===
-numpy<2                         # torch 2.2.2 foi compilado com NumPy 1.x — NumPy 2.x quebra
 sentence-transformers==3.3.1  # Embeddings locais
 langchain-text-splitters==0.3.4  # Chunking inteligente
 

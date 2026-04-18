@@ -6,12 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# NumPy < 2 antes do torch
-RUN pip install --no-cache-dir "numpy<2"
-
-# PyTorch CPU-only
+# torch 2.5.1 CPU-only (~200 MB) — suporta NumPy 2.x nativamente
 RUN pip install --no-cache-dir \
-    torch==2.2.2 \
+    torch==2.5.1 \
     --index-url https://download.pytorch.org/whl/cpu
 
 COPY requirements.txt .

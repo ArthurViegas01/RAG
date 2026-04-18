@@ -7,29 +7,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# NumPy < 2 ANTES do torch (evita incompatibilidade com torch 2.2.2)
-RUN pip install --no-cache-dir "numpy<2"
-
-# PyTorch CPU-only (~180 MB vs ~2.5 GB com CUDA)
+# torch 2.5.1 CPU-only (~200 MB) — suporta NumPy 2.x nativamente
 RUN pip install --no-cache-dir \
-    torch==2.2.2 \
+    torch==2.5.1 \
     --index-url https://download.pytorch.org/whl/cpu
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download do modelo de embedding durante o build
-# Evita timeout no healthcheck do Railway na primeira inicializacao
+# Pre-download do modelo durante o build — evita timeout no healthcheck
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Stage 2: runtime
+# Stage 2: runtime (sem build-essential)
 FROM python:3.11-slim
 
 WORKDIR /app
 
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-# Modelo baixado pelo builder fica no cache do HuggingFace
 COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 
 COPY backend/ .
