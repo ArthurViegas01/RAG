@@ -1,0 +1,40 @@
+# Controle de versao
+.git
+.gitignore
+
+# Frontend — nao entra na imagem do backend
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Dados e uploads locais
+backend/uploads/
+*.db
+*.sqlite
+
+# Ambiente Python local
+backend/.venv
+backend/venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+
+# Arquivos de desenvolvimento
+**/.env
+**/*.env.local
+backend/tests/
+backend/.pytest_cache/
+backend/htmlcov/
+backend/.coverage
+
+# Docs e scripts — nao necessarios na imagem
+docs/
+scripts/
+*.md
+ROADMAP.md
+
+# Docker compose — nao necessario dentro da imagem
+docker-compose*.yml
+Dockerfile*
