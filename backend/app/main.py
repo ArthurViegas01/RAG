@@ -41,6 +41,13 @@ app.include_router(chat_router)
 @app.on_event("startup")
 async def startup_event():
     """Executado ao iniciar a aplicação."""
+    # Log da URL do banco (sem senha) para facilitar diagnóstico
+    db_url = settings.async_database_url
+    masked = db_url.split("@")[-1] if "@" in db_url else db_url
+    logger.info("[Startup] Conectando ao banco: %s", masked)
+    logger.info("[Startup] LLM provider: %s", settings.llm_provider)
+    logger.info("[Startup] CORS origins: %s", settings.cors_origins)
+
     await init_db()
     await _reset_stuck_documents()
 
