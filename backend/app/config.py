@@ -21,10 +21,35 @@ class Settings(BaseSettings):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         return url
 
+    @property
+    def sync_database_url(self) -> str:
+        """URL com driver psycopg2 para uso síncrono no Celery worker."""
+        url = self.database_url
+        # Normaliza qualquer variante para postgresql:// (psycopg2 padrão)
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        elif url.startswith("postgresql+asyncpg://"):
+            url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return url
+
     # Redis / Celery
+    # Railway injeta REDIS_URL automaticamente — celery_broker_url e result_backend
+    # são derivados de redis_url para simplificar a configuração de produção.
     redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/0"
-    celery_result_backend: str = "redis://localhost:6379/1"
+
+    @property
+    def celery_broker_url(self) -> str:
+        """URL do broker Celery — usa REDIS_URL se celery_broker_url não estiver setado."""
+        return self.redis_url
+
+    @property
+    def celery_result_backend(self) -> str:
+        """URL do backend de resultados Celery — mesmo Redis, database 1."""
+        url = self.redis_url
+        # Troca /0 por /1 para separar resultados do broker
+        if url.endswith("/0"):
+            url = url[:-2] + "/1"
+        return url
 
     # Embeddings
     embedding_model: str = "all-MiniLM-L6-v2"

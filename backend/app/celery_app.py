@@ -8,6 +8,7 @@ from celery import Celery
 from app.config import settings
 
 # Cria instância do Celery
+# Usa celery_broker_url e celery_result_backend (properties que lêem REDIS_URL no Railway)
 celery_app = Celery(
     "rag_backend",
     broker=settings.celery_broker_url,

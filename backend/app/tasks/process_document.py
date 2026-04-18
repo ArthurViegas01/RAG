@@ -23,10 +23,8 @@ from app.models import Base, Chunk, Document, DocumentStatus
 from app.services.document_processor import DocumentProcessingService
 from app.services.embedding_service import get_embedding_service
 
-# URL síncrona: troca asyncpg por psycopg2
-SYNC_DATABASE_URL = settings.database_url.replace(
-    "postgresql+asyncpg://", "postgresql+psycopg2://"
-)
+# URL síncrona normalizada (handle postgres://, postgresql://, postgresql+asyncpg://)
+SYNC_DATABASE_URL = settings.sync_database_url
 
 # Engine e session factory criados lazily (na primeira task executada),
 # evitando falha no import caso psycopg2 ainda não esteja disponível.
