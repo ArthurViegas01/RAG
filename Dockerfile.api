@@ -30,4 +30,6 @@ COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 COPY backend/ .
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form (não array) — permite expansao de $PORT pelo shell
+# ${PORT:-8000} usa 8000 como fallback quando PORT nao esta definido (dev local)
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
