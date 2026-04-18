@@ -1,9 +1,10 @@
 /**
  * Cliente HTTP para comunicação com o backend FastAPI.
- * Todas as requisições passam pelo proxy do Vite (/api → http://localhost:8000/api)
+ * Em dev: usa proxy do Vite (/api → http://localhost:8000/api)
+ * Em prod: usa VITE_API_URL definida nas env vars do Netlify
  */
 
-const BASE_URL = "/api";
+const BASE_URL = (import.meta.env.VITE_API_URL ?? "") + "/api";
 
 // ─── Documents ────────────────────────────────────────────
 
