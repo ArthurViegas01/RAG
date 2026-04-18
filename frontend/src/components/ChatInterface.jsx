@@ -44,9 +44,16 @@ export default function ChatInterface({ activeDoc, messages, onMessagesChange })
         { role: "assistant", content: response.answer, citations: response.citations || [] },
       ]);
     } catch (err) {
+      const isOllamaError =
+        err.message.includes("Ollama") || err.message.includes("503");
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `⚠️ ${err.message}`, isError: true },
+        {
+          role: "assistant",
+          content: err.message,
+          isError: true,
+          isOllamaError,
+        },
       ]);
     } finally {
       setIsLoading(false);
@@ -71,7 +78,7 @@ export default function ChatInterface({ activeDoc, messages, onMessagesChange })
       </div>
       <div className="chat-header-info">
         <h2>
-          {activeDoc ? activeDoc.filename : "Papyrus Assistant"}
+          {activeDoc ? activeDoc.filename : "Context Assistant"}
         </h2>
         <p>
           {activeDoc
@@ -103,7 +110,7 @@ export default function ChatInterface({ activeDoc, messages, onMessagesChange })
       </h3>
       <p>
         {hasReady
-          ? "O Papyrus vai buscar os trechos mais relevantes e responder com base no conteúdo do documento."
+          ? "O Context vai buscar os trechos mais relevantes e responder com base no conteúdo do documento."
           : "Envie um PDF ou DOCX, aguarde a indexação e faça perguntas em linguagem natural."}
       </p>
       {!hasReady && (
@@ -136,10 +143,26 @@ export default function ChatInterface({ activeDoc, messages, onMessagesChange })
               {msg.role === "user" ? "🧑" : "📜"}
             </div>
             <div className="message-body">
-              {msg.role === "assistant"
-                ? <ReactMarkdown>{msg.content}</ReactMarkdown>
-                : <p>{msg.content}</p>
-              }
+              {msg.role === "assistant" && msg.isOllamaError ? (
+                <div className="ollama-error">
+                  <p className="ollama-error-title">⚠️ Ollama não está acessível</p>
+                  <p className="ollama-error-body">
+                    O modelo de linguagem local não está rodando. Para corrigir:
+                  </p>
+                  <ol className="ollama-error-steps">
+                    <li>Abra um terminal no seu computador</li>
+                    <li>Execute: <code>ollama serve</code></li>
+                    <li>Aguarde alguns segundos e tente novamente</li>
+                  </ol>
+                  <p className="ollama-error-hint">
+                    Se o Ollama não estiver instalado: <a href="https://ollama.com" target="_blank" rel="noreferrer">ollama.com</a>
+                  </p>
+                </div>
+              ) : msg.role === "assistant" ? (
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              ) : (
+                <p>{msg.content}</p>
+              )}
               {msg.citations?.length > 0 && (
                 <div className="citations">
                   <span className="citations-label">Fontes</span>

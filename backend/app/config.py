@@ -24,9 +24,13 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3"
 
     # Chunking
-    chunk_size: int = 512
-    chunk_overlap: int = 50
-    max_chunks_per_doc: int = 300   # Limita chunks por documento (evita travar em PDFs gigantes)
+    chunk_size: int = 800           # Maior = mais contexto por chunk (melhor para livros)
+    chunk_overlap: int = 150        # Overlap maior = não perde info entre chunks
+    max_chunks_per_doc: int = 2000  # 2000 chunks cobre ~80% de um livro de 750 págs
+
+    # Search / RAG
+    default_top_k: int = 8          # Mais chunks = mais contexto para o LLM
+    min_similarity: float = 0.15    # Limiar mais baixo = busca semântica mais abrangente
 
     # Upload
     upload_dir: str = "./uploads"

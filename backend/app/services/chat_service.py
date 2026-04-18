@@ -15,31 +15,50 @@ from uuid import UUID
 import httpx
 
 from app.config import settings
-from app.services.search_service import SearchResult, SearchService
+from app.services.search_service import SearchResult, SearchService  # noqa: F401
 
 
 # ── Prompt Templates ──────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """Você é o Papyrus, um assistente especialista em analisar documentos.
+SYSTEM_PROMPT = """Você é o Context, um assistente especialista em analisar documentos.
 
-Seu objetivo é responder perguntas baseando-se ESTRITAMENTE nos trechos de documento fornecidos abaixo.
+Responda perguntas baseando-se ESTRITAMENTE nos trechos fornecidos. Nunca invente informações.
 
-Regras:
-1. Responda APENAS com base nos trechos fornecidos. Não invente informações.
-2. Se a resposta não estiver nos trechos, diga honestamente: "Não encontrei essa informação nos documentos carregados."
-3. Cite de forma natural de onde vem a informação (ex: "Conforme o documento...", "De acordo com o trecho...").
-4. Seja claro, direto e técnico quando necessário.
-5. Responda sempre em Português do Brasil.
+REGRAS CRÍTICAS DE RACIOCÍNIO:
+
+1. NUMERAÇÃO DOS TRECHOS vs NUMERAÇÃO DO CONTEÚDO:
+   Os trechos são numerados apenas para organização (Trecho 1, Trecho 2...).
+   Isso NÃO corresponde à numeração do conteúdo (Lei 1, Lei 2...).
+   "Trecho 1" NÃO é a "Lei 1". Leia SEMPRE o conteúdo para identificar qual lei/capítulo é.
+
+2. ORDINAIS E SEQUÊNCIAS:
+   - "Primeira lei" = Lei número 1. Procure "Lei 1" ou "LEI 1" no conteúdo.
+   - "Primeiras 3 leis" = Lei 1, Lei 2 e Lei 3. Procure cada uma no conteúdo dos trechos.
+   - Não confunda ordem dos trechos com números das leis.
+
+3. QUANDO PEDIREM AS "PRIMEIRAS N LEIS":
+   - Identifique nos trechos as leis com os menores números (Lei 1, Lei 2, Lei 3...).
+   - Se nem todas estiverem disponíveis nos trechos, explique quais encontrou e quais não estão nos trechos recuperados.
+
+4. NÃO ENCONTRADO: Se a informação não aparecer nos trechos, diga:
+   "Não encontrei essa informação nos trechos recuperados. O documento pode ser longo e
+   esse trecho específico pode não ter sido indexado."
+   Nunca diga que algo não existe no livro se apenas não apareceu nos trechos.
+
+5. CITAÇÃO: Cite o conteúdo real dos trechos. Mencione o número do trecho apenas como referência.
+
+6. Responda sempre em Português do Brasil.
 """
 
 CONTEXT_TEMPLATE = """---
-TRECHOS RECUPERADOS DO DOCUMENTO:
+TRECHOS RECUPERADOS DO DOCUMENTO (numeração abaixo é apenas organizacional, não corresponde ao número das leis/capítulos):
 
 {context_chunks}
 ---
 
-PERGUNTA DO USUÁRIO:
-{user_query}
+PERGUNTA DO USUÁRIO: {user_query}
+
+INSTRUÇÃO: Baseie-se SOMENTE no conteúdo acima. Leia o texto de cada trecho para identificar qual lei/capítulo ele contém — não use o número do trecho como referência de conteúdo.
 
 RESPOSTA:"""
 
@@ -106,7 +125,7 @@ async def call_ollama(prompt: str, system: str = SYSTEM_PROMPT) -> str:
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             response = await client.post(url, json=payload)
-            response.raise_for_status()
+            response.raise_for_status()  # lança HTTPStatusError em 4xx/5xx
             data = response.json()
             return data["message"]["content"]
         except httpx.ConnectError:
@@ -116,8 +135,17 @@ async def call_ollama(prompt: str, system: str = SYSTEM_PROMPT) -> str:
             )
         except httpx.TimeoutException:
             raise RuntimeError(
-                "O modelo demorou demais para responder. "
-                "Tente uma pergunta mais curta ou um modelo menor."
+                f"O modelo '{settings.ollama_model}' demorou demais para responder (timeout: 120s). "
+                "Tente uma pergunta mais curta, um modelo menor, ou aumente o timeout."
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise RuntimeError(
+                    f"Modelo '{settings.ollama_model}' não encontrado no Ollama. "
+                    f"Execute: 'ollama pull {settings.ollama_model}'"
+                )
+            raise RuntimeError(
+                f"Ollama retornou erro {exc.response.status_code}: {exc.response.text[:200]}"
             )
         except KeyError:
             raise RuntimeError(f"Resposta inesperada do Ollama: {data}")
@@ -167,13 +195,13 @@ class ChatService:
         Returns:
             ChatResult com answer e citations
         """
-        # 1. Busca semântica — encontra chunks relevantes
+        # 1. Busca híbrida (semântica + keyword) — encontra chunks relevantes
         results = await SearchService.search(
             db=db,
             query=question,
             top_k=top_k,
             document_id=document_id,
-            min_similarity=0.25,  # Threshold mais baixo para contexto mais amplo
+            min_similarity=settings.min_similarity,
         )
 
         # 2. Nenhum chunk encontrado

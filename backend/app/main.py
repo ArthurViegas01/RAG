@@ -4,6 +4,7 @@ Entry point da aplicação FastAPI.
 
 import logging
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import update
@@ -73,12 +74,24 @@ async def _reset_stuck_documents():
 @app.get("/health")
 async def health_check():
     """
-    Health check simples.
-    Útil para Docker, load balancers, e para validar que a API está rodando.
+    Health check completo: verifica API, Ollama e modelos configurados.
+    O frontend usa esse endpoint para saber se o Ollama está rodando.
     """
+    ollama_ok = False
+    ollama_error = None
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{settings.ollama_base_url}/api/tags")
+            ollama_ok = r.status_code == 200
+    except Exception as exc:
+        ollama_error = str(exc)
+
     return {
         "status": "healthy",
         "version": "0.1.0",
         "embedding_model": settings.embedding_model,
         "llm_model": settings.ollama_model,
+        "ollama_url": settings.ollama_base_url,
+        "ollama_reachable": ollama_ok,
+        "ollama_error": ollama_error,
     }

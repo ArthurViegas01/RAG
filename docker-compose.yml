@@ -57,6 +57,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      # host.docker.internal é resolvido automaticamente pelo Docker Desktop (Windows/Mac).
+      # Em Linux puro sem Docker Desktop, troque por: http://<seu-ip-local>:11434
       OLLAMA_BASE_URL: http://host.docker.internal:11434
     volumes:
       - ./backend:/app
@@ -79,6 +81,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
     volumes:
       - ./backend:/app
 

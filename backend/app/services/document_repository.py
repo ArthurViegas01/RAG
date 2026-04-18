@@ -5,7 +5,7 @@ Abstrai a lógica de database do resto da aplicação.
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -51,6 +51,13 @@ class DocumentRepository:
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def count_by_filename(db: AsyncSession, filename: str) -> int:
+        """Conta quantos documentos com o mesmo nome de arquivo já existem."""
+        stmt = select(func.count()).where(Document.filename == filename)
+        result = await db.execute(stmt)
+        return result.scalar_one()
 
     @staticmethod
     async def list_all(db: AsyncSession, limit: int = 100, offset: int = 0) -> list[Document]:

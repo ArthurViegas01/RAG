@@ -89,14 +89,18 @@ def process_document(self, document_id: str):
                 time.time() - t_parse, len(chunks_text), filename,
             )
 
-            # 3. Limitar chunks (evita travamento em PDFs gigantes)
+            # 3. Limitar chunks preservando distribuição uniforme do documento.
+            # Ao invés de cortar no início (perdendo o final do doc), amostramos
+            # igualmente do início ao fim para manter cobertura completa.
             total_raw = len(chunks_text)
             if total_raw > settings.max_chunks_per_doc:
+                step = total_raw / settings.max_chunks_per_doc
+                indices = [int(i * step) for i in range(settings.max_chunks_per_doc)]
+                chunks_text = [chunks_text[i] for i in indices]
                 logger.warning(
-                    "[Task] ⚠  '%s': %d chunks → limitando a %d (máx configurado).",
+                    "[Task] ⚠  '%s': %d chunks → amostrados %d distribuídos uniformemente.",
                     filename, total_raw, settings.max_chunks_per_doc,
                 )
-                chunks_text = chunks_text[: settings.max_chunks_per_doc]
 
             # 4. Criar objetos Chunk e salvar
             logger.info("[Task] 💾 Salvando %d chunks de '%s' no banco...", len(chunks_text), filename)

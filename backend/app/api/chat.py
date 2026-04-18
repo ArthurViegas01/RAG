@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.services.chat_service import ChatService
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     question: str
     document_id: UUID | None = None   # None = busca em todos os documentos
-    top_k: int = 5                    # Quantos chunks usar como contexto
+    top_k: int = settings.default_top_k  # Quantos chunks usar como contexto (padrão: 8)
 
 
 class CitationResponse(BaseModel):

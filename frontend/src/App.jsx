@@ -52,14 +52,17 @@ export default function App() {
         <div className="sidebar-logo">
           <div className="logo-mark">📜</div>
           <div className="logo-text">
-            <h1>Papyrus</h1>
+            <h1>Context</h1>
             <p>Converse com seus documentos</p>
           </div>
         </div>
 
         {/* Upload */}
         <div className="upload-section">
-          <DocumentUpload onUploaded={handleUploaded} />
+          <DocumentUpload
+            onUploaded={handleUploaded}
+            existingFilenames={documents.map((d) => d.filename)}
+          />
         </div>
 
         {/* Lista */}

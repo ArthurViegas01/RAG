@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { uploadDocument } from "../api/client";
 
-export default function DocumentUpload({ onUploaded }) {
+export default function DocumentUpload({ onUploaded, existingFilenames = [] }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [warning, setWarning] = useState(null);
   const inputRef = useRef(null);
 
   const handleFile = async (file) => {
@@ -12,13 +13,23 @@ export default function DocumentUpload({ onUploaded }) {
     const ext = file.name.split(".").pop().toLowerCase();
     if (!["pdf", "docx"].includes(ext)) {
       setError("Formato inválido. Aceitos: PDF ou DOCX");
+      setWarning(null);
       return;
     }
+
+    // Avisa sobre duplicata, mas não bloqueia o upload
+    if (existingFilenames.includes(file.name)) {
+      setWarning(`"${file.name}" já foi enviado. Um segundo exemplar será criado.`);
+    } else {
+      setWarning(null);
+    }
+
     setError(null);
     setIsUploading(true);
     try {
       const doc = await uploadDocument(file);
       onUploaded(doc);
+      setWarning(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -69,6 +80,11 @@ export default function DocumentUpload({ onUploaded }) {
         )}
       </label>
 
+      {warning && (
+        <div className="upload-warning">
+          <span>⚠</span> {warning}
+        </div>
+      )}
       {error && (
         <div className="upload-error">
           <span>⚠</span> {error}

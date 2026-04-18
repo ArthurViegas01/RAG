@@ -40,6 +40,22 @@ export async function listDocuments() {
 }
 
 /**
+ * Reprocessa um documento que falhou
+ * @param {string} docId
+ * @returns {Promise<{id, filename, status, ...}>}
+ */
+export async function reprocessDocument(docId) {
+  const res = await fetch(`${BASE_URL}/documents/${docId}/reprocess`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Erro ao reprocessar (${res.status})`);
+  }
+  return res.json();
+}
+
+/**
  * Deleta um documento e seus chunks
  * @param {string} docId
  */
