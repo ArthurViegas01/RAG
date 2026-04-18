@@ -1,34 +1,37 @@
-# ── Stage 1: build ────────────────────────────────────────────────────────────
+# Stage 1: build
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Ferramentas de compilacao (ficam so no stage de build)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# PyTorch CPU-only PRIMEIRO (~180 MB vs ~2.5 GB da versao CUDA)
-# sentence-transformers vai usar esse torch ja instalado
+# NumPy < 2 ANTES do torch (evita incompatibilidade com torch 2.2.2)
+RUN pip install --no-cache-dir "numpy<2"
+
+# PyTorch CPU-only (~180 MB vs ~2.5 GB com CUDA)
 RUN pip install --no-cache-dir \
     torch==2.2.2 \
     --index-url https://download.pytorch.org/whl/cpu
 
 COPY backend/requirements.txt .
-
-# Instala o restante sem reinstalar torch
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+# Pre-download do modelo de embedding durante o build
+# Evita timeout no healthcheck do Railway na primeira inicializacao
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# Stage 2: runtime
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copia apenas o Python environment do stage de build
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+# Modelo baixado pelo builder fica no cache do HuggingFace
+COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 
-# Copia o codigo do backend
 COPY backend/ .
 
 EXPOSE 8000

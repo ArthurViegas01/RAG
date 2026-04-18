@@ -6,8 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# PyTorch CPU-only PRIMEIRO (~180 MB vs ~2.5 GB com CUDA)
-# sentence-transformers detecta e usa o torch já instalado
+# NumPy < 2 antes do torch (torch 2.2.2 foi compilado com NumPy 1.x)
+RUN pip install --no-cache-dir "numpy<2"
+
+# PyTorch CPU-only (~180 MB vs ~2.5 GB com CUDA)
 RUN pip install --no-cache-dir \
     torch==2.2.2 \
     --index-url https://download.pytorch.org/whl/cpu

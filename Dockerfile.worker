@@ -1,4 +1,4 @@
-# ── Stage 1: build ────────────────────────────────────────────────────────────
+# Stage 1: build
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# PyTorch CPU-only
+RUN pip install --no-cache-dir "numpy<2"
+
 RUN pip install --no-cache-dir \
     torch==2.2.2 \
     --index-url https://download.pytorch.org/whl/cpu
@@ -15,13 +16,17 @@ RUN pip install --no-cache-dir \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+# Pre-download do modelo
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# Stage 2: runtime
 FROM python:3.11-slim
 
 WORKDIR /app
 
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 
 COPY backend/ .
 
