@@ -13,23 +13,42 @@ class Settings(BaseSettings):
 
     @property
     def async_database_url(self) -> str:
-        """Garante que a URL use o driver asyncpg, independente do formato injetado."""
+        """Garante que a URL use o driver asyncpg, independente do formato injetado.
+        Railway e outros clouds exigem SSL — adiciona automaticamente quando não é localhost.
+        """
         url = self.database_url
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+
+        # Adiciona ssl=require para ambientes cloud (Railway, Render, etc.)
+        # Não aplica em localhost/127.0.0.1 para não quebrar dev local
+        is_local = "localhost" in url or "127.0.0.1" in url
+        if not is_local and "ssl" not in url:
+            sep = "&" if "?" in url else "?"
+            url += f"{sep}ssl=require"
+
         return url
 
     @property
     def sync_database_url(self) -> str:
-        """URL com driver psycopg2 para uso síncrono no Celery worker."""
+        """URL com driver psycopg2 para uso síncrono no Celery worker.
+        Railway exige SSL — adiciona sslmode=require automaticamente quando não é localhost.
+        """
         url = self.database_url
         # Normaliza qualquer variante para postgresql:// (psycopg2 padrão)
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         elif url.startswith("postgresql+asyncpg://"):
             url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+        # psycopg2 usa sslmode (não ssl) como parâmetro de URL
+        is_local = "localhost" in url or "127.0.0.1" in url
+        if not is_local and "sslmode" not in url:
+            sep = "&" if "?" in url else "?"
+            url += f"{sep}sslmode=require"
+
         return url
 
     # Redis / Celery
