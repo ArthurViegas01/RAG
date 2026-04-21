@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instala PyTorch CPU-only (~200 MB)
+RUN pip install --no-cache-dir \
+    torch==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Instala dependências Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copia código
+COPY . .
+
+# Modo produção: Celery worker com logging estruturado
+# Usar múltiplos workers não é recomendado (Celery roda em apenas 1 processo)
+CMD ["celery", "-A", "app.celery_app", "worker", \
+     "--loglevel=info", \
+     "--concurrency=4", \
+     "--pool=prefork", \
+     "--time-limit=600", \
+     "--soft-time-limit=540"]

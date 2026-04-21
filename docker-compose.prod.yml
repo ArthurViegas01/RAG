@@ -1,11 +1,22 @@
 version: "3.8"
 
-# Compose para deploy em VPS (sem frontend — servido pelo Netlify)
+# Compose para deploy em VPS com Nginx reverse proxy
 # Uso: docker-compose -f docker-compose.prod.yml up -d
+#
+# Estrutura:
+#   - Nginx (porta 80/443) → faz proxy para API e Frontend
+#   - FastAPI Backend (porta 8000)
+#   - Celery Worker (processamento em background)
+#   - PostgreSQL (porta 5432 - apenas interno)
+#   - Redis (porta 6379 - apenas interno)
 
 services:
+  # ============================================
+  # PostgreSQL + pgvector
+  # ============================================
   db:
     image: pgvector/pgvector:pg16
+    container_name: rag-postgres-prod
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -18,9 +29,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - rag-network
+    # Não expõe porta externamente - apenas para containers
 
+  # ============================================
+  # Redis — broker do Celery
+  # ============================================
   redis:
     image: redis:7-alpine
+    container_name: rag-redis-prod
     restart: always
     volumes:
       - redis-data:/data
@@ -29,42 +47,114 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - rag-network
+    # Não expõe porta externamente - apenas para containers
 
+  # ============================================
+  # FastAPI Backend (Gunicorn em produção)
+  # ============================================
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prod
+    container_name: rag-api-prod
     restart: always
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
+    env_file: .env.prod
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ./backend/uploads:/app/uploads
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
+  # ============================================
+  # Celery Worker (processamento async)
+  # ============================================
   worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile.worker
+      dockerfile: Dockerfile.worker.prod
+    container_name: rag-worker-prod
     restart: always
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env
+    env_file: .env.prod
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ./backend/uploads:/app/uploads
+    networks:
+      - rag-network
+
+  # ============================================
+  # Frontend React (servido estaticamente)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: rag-frontend-prod
+    restart: always
+    expose:
+      - "5173"
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # Nginx — Reverse Proxy e Load Balancer
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: rag-nginx-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./frontend/dist:/var/www/frontend:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  rag-network:
+    driver: bridge
 
 volumes:
   pgdata:
