@@ -29,6 +29,6 @@ celery_app.conf.update(
     worker_task_log_format="%(asctime)s %(levelname)-8s %(message)s",
     # Evita CPendingDeprecationWarning no Celery 5.x
     broker_connection_retry_on_startup=True,
-    # Embedding model is large — 2 workers is enough and avoids OOM on Railway
-    worker_concurrency=2,
+    # Embedding model is large — keep to 1 worker to avoid OOM on Railway
+    worker_concurrency=1,
 )
