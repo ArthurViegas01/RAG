@@ -85,7 +85,7 @@ class Settings(BaseSettings):
 
     # Groq (produção — gratuito, https://console.groq.com)
     groq_api_key: str = ""
-    groq_model: str = "llama3-8b-8192"
+    groq_model: str = "llama-3.1-8b-instant"
 
     # OpenAI (alternativa)
     openai_api_key: str = ""
