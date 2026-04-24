@@ -9,9 +9,12 @@ Por que síncrona?
 """
 
 import logging
+import os
+import tempfile
 import time
 from uuid import UUID
 
+import redis as redis_lib
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -23,22 +26,31 @@ from app.models import Base, Chunk, Document, DocumentStatus
 from app.services.document_processor import DocumentProcessingService
 from app.services.embedding_service import get_embedding_service
 
-# URL síncrona normalizada (handle postgres://, postgresql://, postgresql+asyncpg://)
 SYNC_DATABASE_URL = settings.sync_database_url
 
-# Engine e session factory criados lazily (na primeira task executada),
-# evitando falha no import caso psycopg2 ainda não esteja disponível.
 _sync_engine = None
 _SyncSession = None
+_redis_client = None
 
 
 def _get_session_factory():
-    """Inicializa o engine síncrono na primeira chamada (lazy)."""
     global _sync_engine, _SyncSession
     if _SyncSession is None:
         _sync_engine = create_engine(SYNC_DATABASE_URL, pool_pre_ping=True)
         _SyncSession = sessionmaker(bind=_sync_engine)
     return _SyncSession
+
+
+def _get_redis() -> redis_lib.Redis:
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis_lib.from_url(settings.redis_url, decode_responses=False)
+    return _redis_client
+
+
+def _load_file(doc_id: str) -> bytes | None:
+    return _get_redis().get(f"doc_file:{doc_id}")
+
 
 TASK_TIMEOUT = 600  # 10 minutos
 
@@ -49,11 +61,9 @@ TASK_TIMEOUT = 600  # 10 minutos
     time_limit=TASK_TIMEOUT,
     soft_time_limit=TASK_TIMEOUT - 30,
 )
-def process_document(self, document_id: str):
+def process_document(self, document_id: str, file_ext: str):
     """
-    Processa um documento: parse → chunking → embeddings → salva no banco.
-
-    Completamente síncrono — sem asyncio, sem conflitos de event loop.
+    Processa um documento: lê conteúdo do Redis → parse → chunking → embeddings → salva no banco.
     """
     doc_uuid = UUID(document_id)
     SyncSession = _get_session_factory()
@@ -69,15 +79,26 @@ def process_document(self, document_id: str):
         logger.info("[Task] ▶ Iniciando processamento de '%s' (id=%s)", filename, document_id)
 
         try:
-            # 1. Marcar como PROCESSING
             doc.status = DocumentStatus.PROCESSING
             db.commit()
 
-            # 2. Parse + chunking
-            logger.info("[Task] 📄 Fazendo parse do arquivo '%s'...", filename)
-            t_parse = time.time()
-            processor = DocumentProcessingService()
-            chunks_text = processor.process(doc.file_path)
+            # Lê conteúdo do Redis — funciona em qualquer ambiente sem filesystem compartilhado
+            file_content = _load_file(document_id)
+            if not file_content:
+                raise ValueError(f"Conteúdo do arquivo não encontrado no Redis para doc {document_id}")
+
+            # Escreve em arquivo temporário para o parser (pymupdf/docx exigem arquivo em disco)
+            with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+                tmp.write(file_content)
+                tmp_path = tmp.name
+
+            try:
+                logger.info("[Task] 📄 Fazendo parse do arquivo '%s'...", filename)
+                t_parse = time.time()
+                processor = DocumentProcessingService()
+                chunks_text = processor.process(tmp_path)
+            finally:
+                os.unlink(tmp_path)
 
             if not chunks_text:
                 raise ValueError(f"Nenhum texto extraído de: {filename}")
@@ -87,9 +108,6 @@ def process_document(self, document_id: str):
                 time.time() - t_parse, len(chunks_text), filename,
             )
 
-            # 3. Limitar chunks preservando distribuição uniforme do documento.
-            # Ao invés de cortar no início (perdendo o final do doc), amostramos
-            # igualmente do início ao fim para manter cobertura completa.
             total_raw = len(chunks_text)
             if total_raw > settings.max_chunks_per_doc:
                 step = total_raw / settings.max_chunks_per_doc
@@ -100,16 +118,14 @@ def process_document(self, document_id: str):
                     filename, total_raw, settings.max_chunks_per_doc,
                 )
 
-            # 4. Criar objetos Chunk e salvar
             logger.info("[Task] 💾 Salvando %d chunks de '%s' no banco...", len(chunks_text), filename)
             chunks = [
                 Chunk(document_id=doc_uuid, content=text, chunk_index=i)
                 for i, text in enumerate(chunks_text)
             ]
             db.add_all(chunks)
-            db.flush()  # flush para gerar os IDs sem fechar a transação
+            db.flush()
 
-            # 5. Gerar embeddings em batch com progresso
             n = len(chunks_text)
             logger.info("[Task] 🧠 Gerando embeddings para %d chunks de '%s'...", n, filename)
             t_emb = time.time()
@@ -132,11 +148,9 @@ def process_document(self, document_id: str):
                 time.time() - t_emb, filename,
             )
 
-            # 6. Atribuir embeddings aos chunks
             for chunk, vector in zip(chunks, all_vectors):
                 chunk.embedding = vector
 
-            # 7. Marcar como DONE e salvar tudo em um único commit
             doc.status = DocumentStatus.DONE
             doc.total_chunks = len(chunks)
             db.commit()
@@ -160,11 +174,10 @@ def process_document(self, document_id: str):
             error_msg = str(e)
             logger.error("[Task] ❌ Erro ao processar '%s': %s", filename, error_msg, exc_info=True)
 
-            # Busca o doc novamente após rollback para atualizar status
             doc = db.get(Document, doc_uuid)
             if doc:
                 doc.status = DocumentStatus.ERROR
-                doc.error_message = error_msg[:500]  # trunca mensagem longa
+                doc.error_message = error_msg[:500]
                 db.commit()
 
             return {

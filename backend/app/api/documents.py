@@ -3,8 +3,9 @@ API endpoints para upload e gerenciamento de documentos.
 """
 
 import os
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import redis as redis_lib
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,33 @@ from app.tasks import process_document
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
+# TTL de 7 dias — tempo suficiente para reprocessamento manual
+_FILE_TTL = 7 * 24 * 3600
+_redis_client = None
+
+
+def _get_redis() -> redis_lib.Redis:
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis_lib.from_url(settings.redis_url, decode_responses=False)
+    return _redis_client
+
+
+def _file_key(doc_id: str) -> str:
+    return f"doc_file:{doc_id}"
+
+
+def _store_file(doc_id: str, content: bytes) -> None:
+    _get_redis().setex(_file_key(doc_id), _FILE_TTL, content)
+
+
+def _load_file(doc_id: str) -> bytes | None:
+    return _get_redis().get(_file_key(doc_id))
+
+
+def _delete_file(doc_id: str) -> None:
+    _get_redis().delete(_file_key(doc_id))
+
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
@@ -25,22 +53,6 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     response: Response = None,
 ):
-    """
-    Upload de um documento (PDF ou DOCX).
-
-    1. Valida arquivo
-    2. Salva no filesystem
-    3. Cria registro no banco
-    4. Enfileira task Celery para processamento
-
-    Args:
-        file: Arquivo (PDF ou DOCX)
-        db: Sessão do banco
-
-    Returns:
-        DocumentResponse com dados do documento criado
-    """
-    # Validação de tipo de arquivo
     allowed_extensions = {".pdf", ".docx"}
     file_ext = os.path.splitext(file.filename)[1].lower()
 
@@ -50,21 +62,15 @@ async def upload_document(
             detail=f"Tipo de arquivo não suportado. Aceitos: {allowed_extensions}",
         )
 
-    # Verificar duplicata (não bloqueia, apenas avisa via header)
     existing_count = await DocumentRepository.count_by_filename(db, file.filename)
     if existing_count > 0 and response is not None:
         response.headers["X-Duplicate-Warning"] = (
             f"Já existe {existing_count} documento(s) com este nome."
         )
 
-    # Criar pasta de uploads se não existir
-    os.makedirs(settings.upload_dir, exist_ok=True)
-
-    # Salvar arquivo no filesystem
     file_content = await file.read()
     file_size_bytes = len(file_content)
 
-    # Validar tamanho
     max_bytes = settings.max_file_size_mb * 1024 * 1024
     if file_size_bytes > max_bytes:
         raise HTTPException(
@@ -72,26 +78,18 @@ async def upload_document(
             detail=f"Arquivo muito grande. Máximo: {settings.max_file_size_mb}MB",
         )
 
-    # Salvar arquivo (com UUID no nome para evitar colisões)
-    from uuid import uuid4
-    unique_filename = f"{uuid4()}{file_ext}"
-    file_path = os.path.join(settings.upload_dir, unique_filename)
-
-    with open(file_path, "wb") as f:
-        f.write(file_content)
-
-    # Criar documento no banco
     doc = await DocumentRepository.create(
         db=db,
         filename=file.filename,
-        file_path=file_path,
+        file_path=file.filename,
         file_size_bytes=file_size_bytes,
     )
 
-    # Enfileirar task Celery para processar em background
-    task = process_document.delay(str(doc.id))
+    # Armazena o conteúdo no Redis — compartilhado entre API e worker sem depender
+    # de filesystem local (containers isolados em prod/Railway)
+    _store_file(str(doc.id), file_content)
 
-    # Salva o task_id para permitir cancelamento posterior
+    task = process_document.delay(str(doc.id), file_ext)
     doc.celery_task_id = task.id
     await db.commit()
     await db.refresh(doc)
@@ -105,17 +103,6 @@ async def list_documents(
     limit: int = 10,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Lista documentos com paginação.
-
-    Args:
-        skip: Quantos documentos pular
-        limit: Quantos documentos retornar
-        db: Sessão do banco
-
-    Returns:
-        Lista de DocumentResponse
-    """
     docs = await DocumentRepository.list_all(db, limit=limit, offset=skip)
     return [DocumentResponse.model_validate(doc) for doc in docs]
 
@@ -125,19 +112,6 @@ async def get_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Busca um documento com seus chunks.
-
-    Args:
-        doc_id: UUID do documento
-        db: Sessão do banco
-
-    Returns:
-        DocumentDetailResponse (com chunks)
-
-    Raises:
-        HTTPException: 404 se documento não encontrado
-    """
     doc = await DocumentRepository.get_by_id_with_chunks(db, doc_id)
 
     if not doc:
@@ -154,21 +128,6 @@ async def get_document_status(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Obtém o status do processamento de um documento.
-
-    Útil para o frontend verificar quando um documento terminou de ser processado.
-
-    Args:
-        doc_id: UUID do documento
-        db: Sessão do banco
-
-    Returns:
-        dict com status, total_chunks, e error_message (se houver erro)
-
-    Raises:
-        HTTPException: 404 se documento não encontrado
-    """
     doc = await DocumentRepository.get_by_id(db, doc_id)
 
     if not doc:
@@ -193,13 +152,6 @@ async def reprocess_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Reprocessa um documento que falhou (status = error).
-    Remove chunks existentes, reseta o status e reenfileira a task.
-
-    Raises:
-        HTTPException: 404 se não encontrado, 409 se já estiver processando/pronto
-    """
     doc = await DocumentRepository.get_by_id(db, doc_id)
     if not doc:
         raise HTTPException(
@@ -213,26 +165,25 @@ async def reprocess_document(
             detail="Documento já está sendo processado.",
         )
 
-    if not os.path.exists(doc.file_path):
+    if _load_file(str(doc_id)) is None:
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
-            detail="Arquivo original não encontrado. Envie o documento novamente.",
+            detail="Conteúdo original expirou. Envie o documento novamente.",
         )
 
-    # Remove chunks parciais do processamento anterior
+    file_ext = os.path.splitext(doc.filename)[1].lower()
+
     from sqlalchemy import delete as sql_delete
     from app.models import Chunk
     await db.execute(sql_delete(Chunk).where(Chunk.document_id == doc_id))
 
-    # Reseta o documento
     doc.status = DocumentStatus.PENDING
     doc.error_message = None
     doc.total_chunks = 0
     await db.commit()
     await db.refresh(doc)
 
-    # Reenfileira a task
-    task = process_document.delay(str(doc.id))
+    task = process_document.delay(str(doc.id), file_ext)
     doc.celery_task_id = task.id
     await db.commit()
     await db.refresh(doc)
@@ -245,13 +196,6 @@ async def delete_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Deleta um documento e todos os seus chunks.
-    Remove também o arquivo do filesystem.
-
-    Raises:
-        HTTPException: 404 se documento não encontrado
-    """
     doc = await DocumentRepository.get_by_id(db, doc_id)
 
     if not doc:
@@ -260,17 +204,13 @@ async def delete_document(
             detail=f"Documento não encontrado: {doc_id}",
         )
 
-    # Tenta revogar a task Celery (caso ainda esteja em execução)
     if doc.celery_task_id:
         try:
             celery_app.control.revoke(doc.celery_task_id, terminate=True, signal="SIGTERM")
         except Exception:
-            pass  # Não falha o delete se a revogação não funcionar
+            pass
 
-    # Remove o arquivo do disco
-    if doc.file_path and os.path.exists(doc.file_path):
-        os.remove(doc.file_path)
+    _delete_file(str(doc_id))
 
-    # Remove do banco (cascade deleta os chunks automaticamente)
     await db.delete(doc)
     await db.commit()
