@@ -10,11 +10,13 @@ from app.config import settings
 from app.models import Base
 
 # Engine assíncrono para PostgreSQL
-# Usa async_database_url para garantir driver asyncpg (Railway injeta "postgresql://")
+# SSL é passado via connect_args — asyncpg não aceita ssl=/sslmode= na query string da URL
+_ssl = False if settings.db_is_local else True
 engine = create_async_engine(
     settings.async_database_url,
-    echo=False,  # Mude para True para ver SQL queries (debug)
-    pool_pre_ping=True,  # Valida conexões antes de usar
+    echo=False,
+    pool_pre_ping=True,
+    connect_args={"ssl": _ssl},
 )
 
 # Session factory
