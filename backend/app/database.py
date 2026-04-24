@@ -11,12 +11,20 @@ from app.models import Base
 
 # Engine assíncrono para PostgreSQL
 # SSL é passado via connect_args — asyncpg não aceita ssl=/sslmode= na query string da URL
-_ssl = False if settings.db_is_local else True
+if settings.db_is_local:
+    _connect_args: dict = {"ssl": False}
+else:
+    import ssl as _ssl_mod
+    _ssl_ctx = _ssl_mod.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = _ssl_mod.CERT_NONE
+    _connect_args = {"ssl": _ssl_ctx}
+
 engine = create_async_engine(
     settings.async_database_url,
     echo=False,
     pool_pre_ping=True,
-    connect_args={"ssl": _ssl},
+    connect_args=_connect_args,
 )
 
 # Session factory
