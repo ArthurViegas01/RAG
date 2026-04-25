@@ -1,4 +1,6 @@
 # Stage 1: build
+# Instala dependências e pré-baixa o modelo ONNX durante o build,
+# evitando download em runtime e acelerando o cold start do worker.
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -7,23 +9,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cpu
-
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# Pré-baixa o modelo durante o build (evita download em runtime e OOM no cold start).
+# fastembed salva em ~/.cache/fastembed por padrão.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
-# Stage 2: runtime
+# Stage 2: runtime (imagem enxuta, sem build-essential)
 FROM python:3.11-slim
 
 WORKDIR /app
 
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
+# Cache do modelo ONNX (fastembed) — copiado do stage de build
+COPY --from=builder /root/.cache/fastembed /root/.cache/fastembed
 
 COPY backend/ .
 
