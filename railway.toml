@@ -1,9 +1,11 @@
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.api"
+# railway.toml — configuracoes compartilhadas entre todos os servicos.
+#
+# IMPORTANTE: dockerfilePath e healthcheckPath foram removidos daqui
+# porque o railway.toml e aplicado a TODOS os servicos do repo.
+# O Celery worker nao serve HTTP, entao nao pode responder a /health.
+# Configure dockerfile e healthcheck individualmente no dashboard do Railway
+# para cada servico (api, celery, frontend).
 
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
