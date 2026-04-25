@@ -6,6 +6,10 @@
 # Configure dockerfile e healthcheck individualmente no dashboard do Railway
 # para cada servico (api, celery, frontend).
 
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.worker.prod"
+
 [deploy]
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
