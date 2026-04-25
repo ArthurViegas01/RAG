@@ -1,29 +1,36 @@
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# fastembed + onnxruntime distribuem wheels pré-compilados — build-essential não é necessário.
+
+# Instala dependências Python
+# O build context é a raiz do repo, então o path precisa incluir backend/
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Pré-baixa o modelo ONNX durante o build para evitar download em runtime.
+# fastembed salva em ~/.cache/fastembed por padrão.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
+
+# Stage 2: imagem de runtime enxuta
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instala dependências do sistema
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+# Cache do modelo ONNX pré-baixado no build
+COPY --from=builder /root/.cache/fastembed /root/.cache/fastembed
 
-# Instala PyTorch CPU-only (~200 MB)
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cpu
+# Copia código (build context = raiz do repo)
+COPY backend/ .
 
-# Instala dependências Python
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copia código
-COPY . .
-
-# Modo produção: Celery worker com logging estruturado
-# Usar múltiplos workers não é recomendado (Celery roda em apenas 1 processo)
+# Modo produção: 1 worker — o modelo ONNX já consome ~120 MB; múltiplos workers
+# causavam OOM no Railway. worker_max_memory_per_child está configurado em celery_app.py.
 CMD ["celery", "-A", "app.celery_app", "worker", \
      "--loglevel=info", \
-     "--concurrency=4", \
+     "--concurrency=1", \
      "--pool=prefork", \
      "--time-limit=600", \
      "--soft-time-limit=540"]
