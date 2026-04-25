@@ -1,25 +1,60 @@
 """
-Fixtures compartilhadas para os testes do Papyrus.
+Fixtures compartilhadas para os testes do RAG.
+
+O bloco de mocks no topo deste arquivo e executado antes de qualquer modulo
+de teste ser importado. Isso permite rodar os testes unitarios sem instalar
+as dependencias pesadas (sentence-transformers, asyncpg, pgvector).
 """
 
+import sys
 import os
+from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
 
 
-# ── Configuração de event loop para testes async ───────────────────────────────
+# ── Mock de bibliotecas pesadas / de infraestrutura ──────────────────────────
+# Executado antes de qualquer import dos modulos da app.
+
+def _stub(name, *submodules):
+    """Registra um MagicMock em sys.modules para 'name' e seus submodulos."""
+    if name not in sys.modules:
+        sys.modules[name] = MagicMock()
+    for sub in submodules:
+        full = f"{name}.{sub}"
+        if full not in sys.modules:
+            sys.modules[full] = MagicMock()
+
+# sentence-transformers (torch nao precisa ser instalado para unit tests)
+_stub("sentence_transformers")
+
+# asyncpg (driver PostgreSQL) — nao conecta de verdade nos unit tests
+_stub("asyncpg", "exceptions", "pgproto", "pgproto.pgproto")
+
+# pgvector SQLAlchemy integration
+_stub("pgvector", "sqlalchemy")
+_stub("pgvector.sqlalchemy")
+
+# Configura o mock do sentence_transformers para retornar vetores realistas
+import numpy as np  # noqa: E402 — numpy ja vem com langchain
+_mock_st_model = MagicMock()
+_mock_st_model.encode.return_value = [0.1] * 384
+_mock_st_model.get_sentence_embedding_dimension.return_value = 384
+sys.modules["sentence_transformers"].SentenceTransformer.return_value = _mock_st_model
+
+
+# ── Configuracao de event loop ────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"
 
 
-# ── Marcadores customizados ────────────────────────────────────────────────────
+# ── Marcadores customizados ───────────────────────────────────────────────────
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "unit: teste unitário rápido, sem dependências externas")
-    config.addinivalue_line("markers", "integration: teste de integração que requer serviços externos")
+    config.addinivalue_line("markers", "unit: teste unitario rapido, sem dependencias externas")
+    config.addinivalue_line("markers", "integration: teste de integracao que requer servicos externos")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

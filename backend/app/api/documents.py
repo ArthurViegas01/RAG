@@ -65,7 +65,7 @@ async def upload_document(
     existing_count = await DocumentRepository.count_by_filename(db, file.filename)
     if existing_count > 0 and response is not None:
         response.headers["X-Duplicate-Warning"] = (
-            f"Já existe {existing_count} documento(s) com este nome."
+            f"Duplicate: {existing_count} document(s) with this name already exist."
         )
 
     file_content = await file.read()
@@ -74,8 +74,8 @@ async def upload_document(
     max_bytes = settings.max_file_size_mb * 1024 * 1024
     if file_size_bytes > max_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_PAYLOAD_TOO_LARGE,
-            detail=f"Arquivo muito grande. Máximo: {settings.max_file_size_mb}MB",
+            status_code=413,
+            detail=f"File too large. Maximum: {settings.max_file_size_mb}MB",
         )
 
     doc = await DocumentRepository.create(
