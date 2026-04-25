@@ -8,7 +8,7 @@
 
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile.worker.prod"
+dockerfilePath = "Dockerfile.api"
 
 [deploy]
 restartPolicyType = "ON_FAILURE"
