@@ -1,35 +1,24 @@
-# Stage 1: build
-FROM python:3.11-slim AS builder
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# torch 2.5.1 CPU-only (~200 MB) — suporta NumPy 2.x nativamente
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cpu
-
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Pre-download do modelo durante o build — evita timeout no healthcheck
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-
-# Stage 2: runtime (sem build-essential)
+# Railway — API service
+# Build context: repo root (dockerfilePath set in Railway dashboard)
 FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    FASTEMBED_CACHE_PATH=/app/models
+
+# Install deps before copying code — maximises layer cache reuse on rebuilds
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Pre-download the ONNX embedding model during build.
+# Avoids runtime download which would cause the healthcheck to time out.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
 COPY backend/ .
 
 EXPOSE 8000
-# Shell form (não array) — permite expansao de $PORT pelo shell
-# ${PORT:-8000} usa 8000 como fallback quando PORT nao esta definido (dev local)
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# exec replaces the shell so uvicorn becomes PID 1 and receives SIGTERM correctly.
+# ${PORT:-8000} allows Railway to inject $PORT at runtime.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

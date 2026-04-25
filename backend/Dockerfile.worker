@@ -1,13 +1,17 @@
+# Local development — Celery worker
+# Build context: backend/
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# fastembed + onnxruntime distribuem wheels pré-compilados — build-essential não é necessário.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    FASTEMBED_CACHE_PATH=/app/models
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pré-baixa o modelo ONNX
+# Pre-download the ONNX embedding model during build.
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
 COPY . .

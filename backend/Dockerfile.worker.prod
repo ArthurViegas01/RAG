@@ -1,25 +1,27 @@
+# Railway — Celery worker service
+# Build context: repo root (dockerfilePath set in Railway dashboard)
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# fastembed + onnxruntime usam wheels pré-compilados — build-essential não é necessário.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    FASTEMBED_CACHE_PATH=/app/models
 
-# Garante path fixo e conhecido para o modelo ONNX (evita ambiguidade de XDG cache).
-ENV FASTEMBED_CACHE_PATH=/app/models
-
-# Instala dependências Python.
-# Build context = raiz do repo, então COPY precisa do prefixo backend/.
+# Install deps before copying code — maximises layer cache reuse on rebuilds
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pré-baixa o modelo durante o build para evitar download em runtime.
-# O path é controlado por FASTEMBED_CACHE_PATH=/app/models acima.
+# Pre-download the ONNX embedding model during build.
+# Avoids a ~80 MB download on the first task and OOM during cold start.
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
-# Copia código (build context = raiz do repo)
+# Copy code after model download so editing app code doesn't invalidate the
+# (slow) pip + model layers above.
 COPY backend/ .
 
-# 1 worker: modelo ONNX consome ~120 MB; múltiplos workers causavam OOM no Railway.
+# concurrency=1: ONNX model uses ~120 MB; multiple prefork workers cause OOM
+# on Railway hobby instances (~512 MB). Raise once the plan is upgraded.
 CMD ["celery", "-A", "app.celery_app", "worker", \
      "--loglevel=info", \
      "--concurrency=1", \
