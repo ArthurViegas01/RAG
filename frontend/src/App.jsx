@@ -1,14 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ChatInterface from "./components/ChatInterface";
 import DocumentList from "./components/DocumentList";
 import DocumentUpload from "./components/DocumentUpload";
+import SplashScreen from "./components/SplashScreen";
 import { listDocuments } from "./api/client";
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [documents, setDocuments] = useState([]);
   const [activeDoc, setActiveDoc] = useState(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [chatHistories, setChatHistories] = useState({});
+
+  const handleSplashDone = useCallback(() => setShowSplash(false), []);
 
   useEffect(() => {
     listDocuments()
@@ -45,7 +49,9 @@ export default function App() {
   };
 
   return (
-    <div className="app-layout">
+    <>
+    {showSplash && <SplashScreen onDone={handleSplashDone} />}
+    <div className={`app-layout app-layout--reveal${showSplash ? "" : " app-layout--visible"}`}>
       {/* ── Sidebar ── */}
       <aside className="sidebar">
         {/* Logo */}
@@ -91,5 +97,6 @@ export default function App() {
         />
       </main>
     </div>
+    </>
   );
 }
