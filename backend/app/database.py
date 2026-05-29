@@ -65,6 +65,12 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS celery_task_id VARCHAR(255)"
         ))
+        await conn.execute(text(
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents (user_id)"
+        ))
 
         # Índice B-tree para filtrar chunks por documento (muito usado em buscas)
         await conn.execute(text(

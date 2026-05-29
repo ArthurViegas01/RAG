@@ -21,6 +21,7 @@ class DocumentRepository:
         filename: str,
         file_path: str,
         file_size_bytes: int,
+        user_id: str | None = None,
     ) -> Document:
         """Cria um novo documento com status PENDING."""
         doc = Document(
@@ -28,6 +29,7 @@ class DocumentRepository:
             file_path=file_path,
             file_size_bytes=file_size_bytes,
             status=DocumentStatus.PENDING,
+            user_id=user_id,
         )
         db.add(doc)
         await db.commit()
@@ -36,8 +38,19 @@ class DocumentRepository:
 
     @staticmethod
     async def get_by_id(db: AsyncSession, doc_id: UUID) -> Document | None:
-        """Busca documento por ID."""
+        """Busca documento por ID (sem filtro de usuário — uso interno)."""
         stmt = select(Document).where(Document.id == doc_id)
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id_for_user(
+        db: AsyncSession, doc_id: UUID, user_id: str
+    ) -> Document | None:
+        """Busca documento por ID verificando propriedade do usuário."""
+        stmt = select(Document).where(
+            Document.id == doc_id, Document.user_id == user_id
+        )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -53,16 +66,27 @@ class DocumentRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def count_by_filename(db: AsyncSession, filename: str) -> int:
-        """Conta quantos documentos com o mesmo nome de arquivo já existem."""
+    async def count_by_filename(
+        db: AsyncSession, filename: str, user_id: str | None = None
+    ) -> int:
+        """Conta documentos com o mesmo nome de arquivo para o usuário."""
         stmt = select(func.count()).where(Document.filename == filename)
+        if user_id is not None:
+            stmt = stmt.where(Document.user_id == user_id)
         result = await db.execute(stmt)
         return result.scalar_one()
 
     @staticmethod
-    async def list_all(db: AsyncSession, limit: int = 100, offset: int = 0) -> list[Document]:
-        """Lista todos os documentos com paginação."""
+    async def list_all(
+        db: AsyncSession,
+        limit: int = 100,
+        offset: int = 0,
+        user_id: str | None = None,
+    ) -> list[Document]:
+        """Lista documentos com paginação, opcionalmente filtrado por usuário."""
         stmt = select(Document).order_by(Document.created_at.desc()).limit(limit).offset(offset)
+        if user_id is not None:
+            stmt = stmt.where(Document.user_id == user_id)
         result = await db.execute(stmt)
         return result.scalars().all()
 

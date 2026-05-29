@@ -6,7 +6,7 @@ import os
 from uuid import UUID, uuid4
 
 import redis as redis_lib
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_app import celery_app
@@ -52,7 +52,9 @@ async def upload_document(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     response: Response = None,
+    x_user_id: str = Header(default=""),
 ):
+    user_id = x_user_id or str(uuid4())
     allowed_extensions = {".pdf", ".docx"}
     file_ext = os.path.splitext(file.filename)[1].lower()
 
@@ -62,10 +64,10 @@ async def upload_document(
             detail=f"Tipo de arquivo não suportado. Aceitos: {allowed_extensions}",
         )
 
-    existing_count = await DocumentRepository.count_by_filename(db, file.filename)
+    existing_count = await DocumentRepository.count_by_filename(db, file.filename, user_id)
     if existing_count > 0 and response is not None:
         response.headers["X-Duplicate-Warning"] = (
-            f"Já existe {existing_count} documento(s) com este nome."
+            f"Duplicate: {existing_count} document(s) with this name already exist."
         )
 
     file_content = await file.read()
@@ -74,8 +76,8 @@ async def upload_document(
     max_bytes = settings.max_file_size_mb * 1024 * 1024
     if file_size_bytes > max_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_PAYLOAD_TOO_LARGE,
-            detail=f"Arquivo muito grande. Máximo: {settings.max_file_size_mb}MB",
+            status_code=413,
+            detail=f"File too large. Maximum: {settings.max_file_size_mb}MB",
         )
 
     doc = await DocumentRepository.create(
@@ -83,6 +85,7 @@ async def upload_document(
         filename=file.filename,
         file_path=file.filename,
         file_size_bytes=file_size_bytes,
+        user_id=user_id,
     )
 
     # Armazena o conteúdo no Redis — compartilhado entre API e worker sem depender
@@ -102,8 +105,10 @@ async def list_documents(
     skip: int = 0,
     limit: int = 10,
     db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(default=""),
 ):
-    docs = await DocumentRepository.list_all(db, limit=limit, offset=skip)
+    user_id = x_user_id or None
+    docs = await DocumentRepository.list_all(db, limit=limit, offset=skip, user_id=user_id)
     return [DocumentResponse.model_validate(doc) for doc in docs]
 
 
@@ -111,8 +116,12 @@ async def list_documents(
 async def get_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(default=""),
 ):
-    doc = await DocumentRepository.get_by_id_with_chunks(db, doc_id)
+    if x_user_id:
+        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
+    else:
+        doc = await DocumentRepository.get_by_id_with_chunks(db, doc_id)
 
     if not doc:
         raise HTTPException(
@@ -127,8 +136,12 @@ async def get_document(
 async def get_document_status(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(default=""),
 ):
-    doc = await DocumentRepository.get_by_id(db, doc_id)
+    if x_user_id:
+        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
+    else:
+        doc = await DocumentRepository.get_by_id(db, doc_id)
 
     if not doc:
         raise HTTPException(
@@ -151,8 +164,12 @@ async def get_document_status(
 async def reprocess_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(default=""),
 ):
-    doc = await DocumentRepository.get_by_id(db, doc_id)
+    if x_user_id:
+        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
+    else:
+        doc = await DocumentRepository.get_by_id(db, doc_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -195,8 +212,12 @@ async def reprocess_document(
 async def delete_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
+    x_user_id: str = Header(default=""),
 ):
-    doc = await DocumentRepository.get_by_id(db, doc_id)
+    if x_user_id:
+        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
+    else:
+        doc = await DocumentRepository.get_by_id(db, doc_id)
 
     if not doc:
         raise HTTPException(

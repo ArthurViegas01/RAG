@@ -1,29 +1,30 @@
+# Railway — Celery worker service
+# Build context: repo root (dockerfilePath set in Railway dashboard)
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instala dependências do sistema
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    FASTEMBED_CACHE_PATH=/app/models
 
-# Instala PyTorch CPU-only (~200 MB)
-RUN pip install --no-cache-dir \
-    torch==2.5.1 \
-    --index-url https://download.pytorch.org/whl/cpu
-
-# Instala dependências Python
-COPY requirements.txt .
+# Install deps before copying code — maximises layer cache reuse on rebuilds
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia código
-COPY . .
+# Pre-download the ONNX embedding model during build.
+# Avoids a ~80 MB download on the first task and OOM during cold start.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
-# Modo produção: Celery worker com logging estruturado
-# Usar múltiplos workers não é recomendado (Celery roda em apenas 1 processo)
+# Copy code after model download so editing app code doesn't invalidate the
+# (slow) pip + model layers above.
+COPY backend/ .
+
+# concurrency=1: ONNX model uses ~120 MB; multiple prefork workers cause OOM
+# on Railway hobby instances (~512 MB). Raise once the plan is upgraded.
 CMD ["celery", "-A", "app.celery_app", "worker", \
      "--loglevel=info", \
-     "--concurrency=4", \
+     "--concurrency=1", \
      "--pool=prefork", \
      "--time-limit=600", \
      "--soft-time-limit=540"]

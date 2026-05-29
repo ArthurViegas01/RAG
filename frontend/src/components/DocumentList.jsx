@@ -2,11 +2,36 @@ import { useEffect, useRef, useState } from "react";
 import { deleteDocument, getDocumentStatus, reprocessDocument } from "../api/client";
 
 const STATUS = {
-  pending:    { label: "Aguardando", cls: "badge-pending" },
-  processing: { label: "Processando", cls: "badge-processing" },
-  done:       { label: "Pronto",      cls: "badge-done" },
-  error:      { label: "Erro",        cls: "badge-error" },
+  pending:    { label: "Aguardando", cls: "badge--pending" },
+  processing: { label: "Processando", cls: "badge--processing" },
+  done:       { label: "Pronto",      cls: "badge--done" },
+  error:      { label: "Erro",        cls: "badge--error" },
 };
+
+const FileIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+    <path d="M14 2v5h5" />
+  </svg>
+);
+
+const XIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+  </svg>
+);
+
+const RetryIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+  </svg>
+);
+
+const FolderIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />
+  </svg>
+);
 
 export default function DocumentList({ documents, activeDocId, onSelect, onUpdate, onDelete }) {
   const [deletingId, setDeletingId] = useState(null);
@@ -90,18 +115,22 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
 
   if (documents.length === 0) {
     return (
-      <div className="doc-list">
-        <div className="doc-list-label">Documentos</div>
-        <p className="doc-empty">
-          Nenhum documento ainda.<br />Envie um arquivo acima para começar.
-        </p>
+      <div>
+        <div className="doclist__label"><span className="eyebrow">Documentos</span></div>
+        <div className="doclist__empty">
+          <FolderIcon />
+          <p>Nenhum documento ainda.<br />Envie um arquivo acima para começar.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="doc-list">
-      <div className="doc-list-label">Documentos · {documents.length}</div>
+    <div>
+      <div className="doclist__label">
+        <span className="eyebrow">Documentos</span>
+        <span className="doclist__count">{documents.length}</span>
+      </div>
 
       {documents.map((doc) => {
         const ext = doc.filename.split(".").pop().toLowerCase();
@@ -110,78 +139,83 @@ export default function DocumentList({ documents, activeDocId, onSelect, onUpdat
         const isError = doc.status === "error";
         const isDeleting = deletingId === doc.id;
         const isReprocessing = reprocessingId === doc.id;
-        const isHovered = hoveredId === doc.id;
+        const showActions = hoveredId === doc.id || isActive;
         const badge = STATUS[doc.status] || STATUS.pending;
-        const icon = ext === "pdf" ? "📕" : "📘";
+
+        const meta =
+          doc.status === "done"
+            ? `${doc.total_chunks} trechos indexados`
+            : doc.status === "error"
+            ? "Erro no processamento"
+            : doc.status === "pending"
+            ? "Na fila…"
+            : "Indexando…";
 
         return (
           <div
             key={doc.id}
-            className={`doc-item ${isActive ? "active" : ""}`}
+            className={`doc ${isActive ? "is-active" : ""}`}
             onClick={() => !isDeleting && onSelect(doc)}
             onMouseEnter={() => setHoveredId(doc.id)}
             onMouseLeave={() => setHoveredId(null)}
             title={doc.filename}
           >
-            <div className={`doc-thumb ${ext}`}>{icon}</div>
-
-            <div className="doc-info">
-              <div className="doc-name">{doc.filename}</div>
-              <div className="doc-meta">
-                {doc.status === "done"
-                  ? `${doc.total_chunks} trechos indexados`
-                  : doc.status === "error"
-                  ? "Erro no processamento"
-                  : "Indexando..."}
-              </div>
+            <div className={`doc__thumb doc__thumb--${ext}`}>
+              <FileIcon />
+              <span className="doc__ext">{ext}</span>
             </div>
 
-            {/* Estado: deletando */}
-            {isDeleting || isReprocessing ? (
-              <div className="spinner" />
-            ) : isProcessing ? (
-              /* Estado: processando — hover mostra botão de cancelar */
-              isHovered || isActive ? (
-                <button
-                  className="doc-delete-btn doc-delete-btn--cancel"
-                  onClick={(e) => handleDelete(e, doc)}
-                  title="Cancelar e deletar"
-                >
-                  ✕
-                </button>
-              ) : (
+            <div className="doc__main">
+              <div className="doc__name">{doc.filename}</div>
+              <div className="doc__meta">{meta}</div>
+            </div>
+
+            <div className="doc__status">
+              {isDeleting || isReprocessing ? (
                 <div className="spinner" />
-              )
-            ) : isError && (isHovered || isActive) ? (
-              /* Estado: erro — hover mostra reprocessar + deletar */
-              <div className="doc-error-actions">
+              ) : isProcessing ? (
+                showActions ? (
+                  <button
+                    className="icon-btn icon-btn--warning"
+                    onClick={(e) => handleDelete(e, doc)}
+                    title="Cancelar e deletar"
+                  >
+                    <XIcon />
+                  </button>
+                ) : (
+                  <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                )
+              ) : isError && showActions ? (
+                <>
+                  <button
+                    className="icon-btn icon-btn--accent"
+                    onClick={(e) => handleReprocess(e, doc)}
+                    title="Tentar novamente"
+                  >
+                    <RetryIcon />
+                  </button>
+                  <button
+                    className="icon-btn icon-btn--danger"
+                    onClick={(e) => handleDelete(e, doc)}
+                    title="Deletar documento"
+                  >
+                    <XIcon />
+                  </button>
+                </>
+              ) : showActions ? (
                 <button
-                  className="doc-action-btn doc-action-btn--retry"
-                  onClick={(e) => handleReprocess(e, doc)}
-                  title="Tentar novamente"
-                >
-                  ↺
-                </button>
-                <button
-                  className="doc-delete-btn"
+                  className="icon-btn icon-btn--danger"
                   onClick={(e) => handleDelete(e, doc)}
                   title="Deletar documento"
                 >
-                  ✕
+                  <XIcon />
                 </button>
-              </div>
-            ) : isHovered || isActive ? (
-              /* Estado: pronto — hover mostra deletar */
-              <button
-                className="doc-delete-btn"
-                onClick={(e) => handleDelete(e, doc)}
-                title="Deletar documento"
-              >
-                ✕
-              </button>
-            ) : (
-              <span className={`badge ${badge.cls}`}>{badge.label}</span>
-            )}
+              ) : (
+                <span className={`badge ${badge.cls}`}>{badge.label}</span>
+              )}
+            </div>
+
+            {isProcessing && <div className="doc__progress" />}
           </div>
         );
       })}

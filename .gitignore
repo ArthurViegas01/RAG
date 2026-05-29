@@ -34,3 +34,6 @@ backend/uploads/*
 # Docker volumes
 pgdata/
 redis-data/
+
+# ML models (downloaded at runtime)
+backend/models/

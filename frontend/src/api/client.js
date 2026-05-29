@@ -6,6 +6,17 @@
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? "") + "/api";
 
+function getUserId() {
+  let id = localStorage.getItem("userId");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("userId", id);
+  }
+  return id;
+}
+
+const userHeaders = () => ({ "X-User-ID": getUserId() });
+
 // ─── Documents ────────────────────────────────────────────
 
 /**
@@ -19,6 +30,7 @@ export async function uploadDocument(file) {
 
   const res = await fetch(`${BASE_URL}/documents/upload`, {
     method: "POST",
+    headers: userHeaders(),
     body: formData,
   });
 
@@ -35,7 +47,7 @@ export async function uploadDocument(file) {
  * @returns {Promise<Array>}
  */
 export async function listDocuments() {
-  const res = await fetch(`${BASE_URL}/documents`);
+  const res = await fetch(`${BASE_URL}/documents`, { headers: userHeaders() });
   if (!res.ok) throw new Error("Erro ao buscar documentos");
   return res.json();
 }
@@ -48,6 +60,7 @@ export async function listDocuments() {
 export async function reprocessDocument(docId) {
   const res = await fetch(`${BASE_URL}/documents/${docId}/reprocess`, {
     method: "POST",
+    headers: userHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -61,7 +74,10 @@ export async function reprocessDocument(docId) {
  * @param {string} docId
  */
 export async function deleteDocument(docId) {
-  const res = await fetch(`${BASE_URL}/documents/${docId}`, { method: "DELETE" });
+  const res = await fetch(`${BASE_URL}/documents/${docId}`, {
+    method: "DELETE",
+    headers: userHeaders(),
+  });
   if (!res.ok) throw new Error("Erro ao deletar documento");
 }
 
@@ -71,7 +87,9 @@ export async function deleteDocument(docId) {
  * @returns {Promise<{status, total_chunks, error_message, ...}>}
  */
 export async function getDocumentStatus(docId) {
-  const res = await fetch(`${BASE_URL}/documents/${docId}/status`);
+  const res = await fetch(`${BASE_URL}/documents/${docId}/status`, {
+    headers: userHeaders(),
+  });
   if (!res.ok) throw new Error("Documento não encontrado");
   return res.json();
 }
@@ -82,7 +100,9 @@ export async function getDocumentStatus(docId) {
  * @returns {Promise<{id, filename, chunks, ...}>}
  */
 export async function getDocument(docId) {
-  const res = await fetch(`${BASE_URL}/documents/${docId}`);
+  const res = await fetch(`${BASE_URL}/documents/${docId}`, {
+    headers: userHeaders(),
+  });
   if (!res.ok) throw new Error("Documento não encontrado");
   return res.json();
 }
@@ -101,7 +121,7 @@ export async function chat(question, documentId = null) {
 
   const res = await fetch(`${BASE_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...userHeaders() },
     body: JSON.stringify(body),
   });
 

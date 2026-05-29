@@ -19,7 +19,7 @@ pymupdf==1.25.3             # Parser de PDF (fitz)
 python-docx==1.1.2          # Parser de DOCX
 
 # === AI / Embeddings ===
-sentence-transformers==3.3.1  # Embeddings locais
+fastembed==0.4.2              # Embeddings locais via ONNX (sem PyTorch, ~80-120MB RAM vs ~400MB)
 langchain-text-splitters==0.3.4  # Chunking inteligente
 
 # === LLM ===
