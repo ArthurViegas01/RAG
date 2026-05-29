@@ -30,6 +30,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String(36), nullable=True, index=True)
     filename = Column(String(255), nullable=False)
     file_path = Column(String(512), nullable=False)
     file_size_bytes = Column(Integer, nullable=False)
