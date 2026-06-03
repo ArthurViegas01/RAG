@@ -57,10 +57,6 @@ _ORDINAL_MAP = {
 
 
 def _remove_accents(text: str) -> str:
-    for a, b in [("a","a"),("a","a"),("a","a"),("a","a"),
-                 ("e","e"),("e","e"),("i","i"),("o","o"),
-                 ("o","o"),("u","u"),("c","c")]:
-        pass
     for src, dst in [
         ("\u00e3","a"), ("\u00e1","a"), ("\u00e2","a"), ("\u00e0","a"),
         ("\u00e9","e"), ("\u00ea","e"), ("\u00ed","i"),

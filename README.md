@@ -32,6 +32,7 @@ Browser (React + Vite)
   ├── PostgreSQL + pgvector   (documents, chunks, embeddings)
   ├── Redis :6379              (Celery broker)
   └── Celery Worker           (parse → chunk → embed → store)
+```
 
 
 ## Estrutura de Pastas
@@ -41,9 +42,6 @@ RAG/
 ├── docker-compose.yml          # PostgreSQL + Redis
 ├── .env.example                # Variáveis de ambiente (copie para .env)
 ├── .gitignore
-├── ROADMAP.md                  # Plano de desenvolvimento
-├── docs/
-│   └── ARCHITECTURE.md         # Este arquivo
 │
 ├── backend/
 │   ├── Dockerfile              # FastAPI
@@ -96,7 +94,7 @@ RAG/
 - Celery + Redis
 - PostgreSQL + pgvector
 - LangChain text splitters
-- Sentence Transformers (all-MiniLM-L6-v2)
+- fastembed / ONNX Runtime (all-MiniLM-L6-v2, 384d, local)
 - Groq / Llama 3 (default), Ollama, OpenAI (configurable via env)
 - React + Vite
 - Docker + Docker Compose
@@ -148,7 +146,7 @@ cd frontend && npm install && npm run dev
 | `REDIS_URL` | `redis://localhost:6379/0` | Celery broker |
 | `LLM_PROVIDER` | `groq` | `groq`, `ollama`, or `openai` |
 | `GROQ_API_KEY` | — | Free key at console.groq.com |
-| `GROQ_MODEL` | `llama3-8b-8192` | Groq model |
+| `GROQ_MODEL` | `llama-3.1-8b-instant` | Groq model |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Local embedding model |
 | `CHUNK_SIZE` | `800` | Max characters per chunk |
 | `CHUNK_OVERLAP` | `150` | Overlap between adjacent chunks |
@@ -158,8 +156,8 @@ cd frontend && npm install && npm run dev
 
 ```bash
 cd backend
-pytest tests/test_chunking.py tests/test_upload_endpoint.py \
-       tests/test_search_endpoint.py tests/test_upload_validation.py \
+pytest tests/test_chunking.py tests/test_upload_endpoint.py tests/test_document_endpoints.py \
+       tests/test_search_endpoint.py tests/test_search_utils.py tests/test_upload_validation.py \
        --cov=app --cov-report=term-missing -v
 
 # Integration tests (requires PostgreSQL, Redis, and an LLM provider running)
