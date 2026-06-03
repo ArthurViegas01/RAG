@@ -102,7 +102,7 @@ cmd_backup() {
     mkdir -p backups
 
     docker-compose -f docker-compose.prod.yml exec -T db \
-        pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$BACKUP_FILE"
+        sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$BACKUP_FILE"
 
     print_info "✓ Backup salvo em: $BACKUP_FILE"
     ls -lh "$BACKUP_FILE"
