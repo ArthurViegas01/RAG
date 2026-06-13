@@ -3,12 +3,13 @@ API endpoints para upload e gerenciamento de documentos.
 """
 
 import os
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import redis as redis_lib
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_id
 from app.celery_app import celery_app
 from app.config import settings
 from app.database import get_db
@@ -19,8 +20,8 @@ from app.tasks import process_document
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-# TTL de 7 dias — tempo suficiente para reprocessamento manual
-_FILE_TTL = 7 * 24 * 3600
+# TTL reduzido — só precisa sobreviver até o worker consumir (24h)
+_FILE_TTL = 24 * 3600
 _redis_client = None
 
 
@@ -52,9 +53,8 @@ async def upload_document(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     response: Response = None,
-    x_user_id: str = Header(default=""),
+    user_id: str = Depends(get_current_user_id),
 ):
-    user_id = x_user_id or str(uuid4())
     allowed_extensions = {".pdf", ".docx"}
     file_ext = os.path.splitext(file.filename)[1].lower()
 
@@ -103,11 +103,10 @@ async def upload_document(
 @router.get("", response_model=list[DocumentResponse])
 async def list_documents(
     skip: int = 0,
-    limit: int = 10,
+    limit: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    x_user_id: str = Header(default=""),
+    user_id: str = Depends(get_current_user_id),
 ):
-    user_id = x_user_id or None
     docs = await DocumentRepository.list_all(db, limit=limit, offset=skip, user_id=user_id)
     return [DocumentResponse.model_validate(doc) for doc in docs]
 
@@ -116,19 +115,14 @@ async def list_documents(
 async def get_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
-    x_user_id: str = Header(default=""),
+    user_id: str = Depends(get_current_user_id),
 ):
-    if x_user_id:
-        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
-    else:
-        doc = await DocumentRepository.get_by_id_with_chunks(db, doc_id)
-
+    doc = await DocumentRepository.get_by_id_with_chunks_for_user(db, doc_id, user_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Documento não encontrado: {doc_id}",
         )
-
     return DocumentDetailResponse.model_validate(doc)
 
 
@@ -136,13 +130,9 @@ async def get_document(
 async def get_document_status(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
-    x_user_id: str = Header(default=""),
+    user_id: str = Depends(get_current_user_id),
 ):
-    if x_user_id:
-        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
-    else:
-        doc = await DocumentRepository.get_by_id(db, doc_id)
-
+    doc = await DocumentRepository.get_by_id_for_user(db, doc_id, user_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -164,12 +154,9 @@ async def get_document_status(
 async def reprocess_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
-    x_user_id: str = Header(default=""),
+    user_id: str = Depends(get_current_user_id),
 ):
-    if x_user_id:
-        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
-    else:
-        doc = await DocumentRepository.get_by_id(db, doc_id)
+    doc = await DocumentRepository.get_by_id_for_user(db, doc_id, user_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -212,13 +199,9 @@ async def reprocess_document(
 async def delete_document(
     doc_id: UUID,
     db: AsyncSession = Depends(get_db),
-    x_user_id: str = Header(default=""),
+    user_id: str = Depends(get_current_user_id),
 ):
-    if x_user_id:
-        doc = await DocumentRepository.get_by_id_for_user(db, doc_id, x_user_id)
-    else:
-        doc = await DocumentRepository.get_by_id(db, doc_id)
-
+    doc = await DocumentRepository.get_by_id_for_user(db, doc_id, user_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

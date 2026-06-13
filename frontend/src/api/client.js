@@ -6,16 +6,40 @@
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? "") + "/api";
 
-function getUserId() {
-  let id = localStorage.getItem("userId");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("userId", id);
-  }
-  return id;
+const TOKEN_KEY = "authToken";
+const USER_ID_KEY = "userId";
+
+/**
+ * Obtém o token JWT armazenado, ou solicita um novo ao backend.
+ * Na primeira chamada, passa o userId legado do localStorage para migração de sessão.
+ */
+async function ensureToken() {
+  const stored = localStorage.getItem(TOKEN_KEY);
+  if (stored) return stored;
+
+  // Migração: usa o userId antigo (UUID gerado pelo browser) se existir
+  const legacyUserId = localStorage.getItem(USER_ID_KEY);
+  const body = legacyUserId ? JSON.stringify({ user_id: legacyUserId }) : "{}";
+
+  const res = await fetch(`${BASE_URL}/auth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+
+  if (!res.ok) throw new Error("Falha ao obter token de autenticação");
+
+  const data = await res.json();
+  localStorage.setItem(TOKEN_KEY, data.access_token);
+  // Remove o userId legado após migração bem-sucedida
+  localStorage.removeItem(USER_ID_KEY);
+  return data.access_token;
 }
 
-const userHeaders = () => ({ "X-User-ID": getUserId() });
+async function authHeaders() {
+  const token = await ensureToken();
+  return { Authorization: `Bearer ${token}` };
+}
 
 // ─── Documents ────────────────────────────────────────────
 
@@ -30,7 +54,7 @@ export async function uploadDocument(file) {
 
   const res = await fetch(`${BASE_URL}/documents/upload`, {
     method: "POST",
-    headers: userHeaders(),
+    headers: await authHeaders(),
     body: formData,
   });
 
@@ -47,7 +71,7 @@ export async function uploadDocument(file) {
  * @returns {Promise<Array>}
  */
 export async function listDocuments() {
-  const res = await fetch(`${BASE_URL}/documents`, { headers: userHeaders() });
+  const res = await fetch(`${BASE_URL}/documents`, { headers: await authHeaders() });
   if (!res.ok) throw new Error("Erro ao buscar documentos");
   return res.json();
 }
@@ -60,7 +84,7 @@ export async function listDocuments() {
 export async function reprocessDocument(docId) {
   const res = await fetch(`${BASE_URL}/documents/${docId}/reprocess`, {
     method: "POST",
-    headers: userHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -76,7 +100,7 @@ export async function reprocessDocument(docId) {
 export async function deleteDocument(docId) {
   const res = await fetch(`${BASE_URL}/documents/${docId}`, {
     method: "DELETE",
-    headers: userHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error("Erro ao deletar documento");
 }
@@ -88,7 +112,7 @@ export async function deleteDocument(docId) {
  */
 export async function getDocumentStatus(docId) {
   const res = await fetch(`${BASE_URL}/documents/${docId}/status`, {
-    headers: userHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error("Documento não encontrado");
   return res.json();
@@ -101,7 +125,7 @@ export async function getDocumentStatus(docId) {
  */
 export async function getDocument(docId) {
   const res = await fetch(`${BASE_URL}/documents/${docId}`, {
-    headers: userHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error("Documento não encontrado");
   return res.json();
@@ -121,7 +145,7 @@ export async function chat(question, documentId = null) {
 
   const res = await fetch(`${BASE_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...userHeaders() },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify(body),
   });
 

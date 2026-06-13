@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+_TEST_USER_ID = "test-user-id"
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -28,11 +29,13 @@ def mock_startup():
 def client(mock_startup):
     from app.main import app
     from app.database import get_db
+    from app.api.deps import get_current_user_id
 
     async def fake_db():
         yield AsyncMock()
 
     app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_current_user_id] = lambda: _TEST_USER_ID
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c
     app.dependency_overrides.clear()
@@ -86,26 +89,37 @@ class TestListDocuments:
         assert "status" in item
         assert "total_chunks" in item
 
+    def test_requires_auth(self):
+        from app.main import app
+        from app.api.deps import get_current_user_id
+        overrides_backup = app.dependency_overrides.copy()
+        if get_current_user_id in app.dependency_overrides:
+            del app.dependency_overrides[get_current_user_id]
+        with TestClient(app, raise_server_exceptions=False) as c:
+            resp = c.get("/api/documents")
+        app.dependency_overrides.update(overrides_backup)
+        assert resp.status_code == 403  # HTTPBearer retorna 403 sem header
+
 
 # ── GET /api/documents/{id} ───────────────────────────────────────────────────
 
 class TestGetDocument:
     def test_returns_200_when_found(self, client):
         doc = _make_doc()
-        with patch("app.api.documents.DocumentRepository.get_by_id_with_chunks",
+        with patch("app.api.documents.DocumentRepository.get_by_id_with_chunks_for_user",
                    new_callable=AsyncMock, return_value=doc):
             resp = client.get(f"/api/documents/{doc.id}")
         assert resp.status_code == 200
 
     def test_returns_404_when_not_found(self, client):
-        with patch("app.api.documents.DocumentRepository.get_by_id_with_chunks",
+        with patch("app.api.documents.DocumentRepository.get_by_id_with_chunks_for_user",
                    new_callable=AsyncMock, return_value=None):
             resp = client.get(f"/api/documents/{uuid4()}")
         assert resp.status_code == 404
 
     def test_response_has_chunks_field(self, client):
         doc = _make_doc()
-        with patch("app.api.documents.DocumentRepository.get_by_id_with_chunks",
+        with patch("app.api.documents.DocumentRepository.get_by_id_with_chunks_for_user",
                    new_callable=AsyncMock, return_value=doc):
             data = client.get(f"/api/documents/{doc.id}").json()
         assert "chunks" in data
@@ -120,20 +134,20 @@ class TestGetDocument:
 class TestGetDocumentStatus:
     def test_returns_200_when_found(self, client):
         doc = _make_doc()
-        with patch("app.api.documents.DocumentRepository.get_by_id",
+        with patch("app.api.documents.DocumentRepository.get_by_id_for_user",
                    new_callable=AsyncMock, return_value=doc):
             resp = client.get(f"/api/documents/{doc.id}/status")
         assert resp.status_code == 200
 
     def test_returns_404_when_not_found(self, client):
-        with patch("app.api.documents.DocumentRepository.get_by_id",
+        with patch("app.api.documents.DocumentRepository.get_by_id_for_user",
                    new_callable=AsyncMock, return_value=None):
             resp = client.get(f"/api/documents/{uuid4()}/status")
         assert resp.status_code == 404
 
     def test_response_contains_status_field(self, client):
         doc = _make_doc()
-        with patch("app.api.documents.DocumentRepository.get_by_id",
+        with patch("app.api.documents.DocumentRepository.get_by_id_for_user",
                    new_callable=AsyncMock, return_value=doc):
             data = client.get(f"/api/documents/{doc.id}/status").json()
         assert "status" in data
@@ -146,14 +160,14 @@ class TestDeleteDocument:
     def test_returns_204_when_found(self, client):
         doc = _make_doc()
         doc.celery_task_id = None
-        with patch("app.api.documents.DocumentRepository.get_by_id",
+        with patch("app.api.documents.DocumentRepository.get_by_id_for_user",
                    new_callable=AsyncMock, return_value=doc), \
              patch("app.api.documents._delete_file"):
             resp = client.delete(f"/api/documents/{doc.id}")
         assert resp.status_code == 204
 
     def test_returns_404_when_not_found(self, client):
-        with patch("app.api.documents.DocumentRepository.get_by_id",
+        with patch("app.api.documents.DocumentRepository.get_by_id_for_user",
                    new_callable=AsyncMock, return_value=None):
             resp = client.delete(f"/api/documents/{uuid4()}")
         assert resp.status_code == 404
@@ -204,6 +218,14 @@ class TestChatEndpoint:
         assert "answer" in data
         assert "citations" in data
         assert "question" in data
+
+    def test_top_k_above_limit_returns_422(self, client):
+        resp = client.post("/api/chat", json={"question": "pergunta", "top_k": 9999})
+        assert resp.status_code == 422
+
+    def test_top_k_zero_returns_422(self, client):
+        resp = client.post("/api/chat", json={"question": "pergunta", "top_k": 0})
+        assert resp.status_code == 422
 
 
 # ── GET /health ────────────────────────────────────────────────────────────────

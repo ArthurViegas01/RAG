@@ -11,6 +11,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+_TEST_USER_ID = "test-user-id"
+
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -25,12 +27,14 @@ def mock_startup():
 def client(mock_startup):
     from app.main import app
     from app.database import get_db
+    from app.api.deps import get_current_user_id
 
     async def fake_db():
         session = AsyncMock()
         yield session
 
     app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_current_user_id] = lambda: _TEST_USER_ID
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c
     app.dependency_overrides.clear()
@@ -118,6 +122,13 @@ class TestSearchHappyPath:
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs.get("document_id") == doc_id
 
+    def test_user_id_forwarded_to_search(self, client):
+        with patch("app.services.search_service.SearchService.search", new_callable=AsyncMock,
+                   return_value=[]) as mock_search:
+            _search(client)
+        call_kwargs = mock_search.call_args.kwargs
+        assert call_kwargs.get("user_id") == _TEST_USER_ID
+
 
 # ── Validacao ─────────────────────────────────────────────────────────────────
 
@@ -132,4 +143,12 @@ class TestSearchValidation:
 
     def test_missing_query_field_returns_422(self, client):
         resp = client.post("/api/search", json={"top_k": 5})
+        assert resp.status_code == 422
+
+    def test_top_k_above_limit_returns_422(self, client):
+        resp = _search(client, top_k=9999)
+        assert resp.status_code == 422
+
+    def test_top_k_zero_returns_422(self, client):
+        resp = _search(client, top_k=0)
         assert resp.status_code == 422

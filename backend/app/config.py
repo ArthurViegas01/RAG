@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 50
 
+    # Auth — JWT HS256
+    # Em produção defina JWT_SECRET via variável de ambiente (Railway / .env)
+    jwt_secret: str = "dev-secret-insecure-change-in-prod"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

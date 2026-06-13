@@ -25,11 +25,13 @@ def mock_startup():
 def client(mock_startup):
     from app.main import app
     from app.database import get_db
+    from app.api.deps import get_current_user_id
 
     async def fake_db():
         yield AsyncMock()
 
     app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_current_user_id] = lambda: "test-user-id"
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
     app.dependency_overrides.clear()

@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import update
 
-from app.api import documents_router, search_router, chat_router
+from app.api import auth_router, documents_router, search_router, chat_router
 from app.config import settings
 from app.database import AsyncSessionLocal, init_db
 from app.models import Document, DocumentStatus
@@ -73,6 +73,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(search_router)
 app.include_router(chat_router)
