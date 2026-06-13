@@ -5,9 +5,10 @@ Endpoint de busca semântica.
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_id
 from app.database import get_db
 from app.services.search_service import SearchService
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/search", tags=["search"])
 class SearchRequest(BaseModel):
     query: str
     document_id: UUID | None = None
-    top_k: int = 5
+    top_k: int = Field(5, ge=1, le=20)
     min_similarity: float = 0.3
 
 
@@ -34,6 +35,7 @@ class SearchResultResponse(BaseModel):
 async def semantic_search(
     request: SearchRequest,
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Busca semântica por chunks relevantes à query.
@@ -41,7 +43,7 @@ async def semantic_search(
     Args:
         request.query: Texto ou pergunta para buscar
         request.document_id: Filtrar por documento (opcional)
-        request.top_k: Quantos resultados retornar
+        request.top_k: Quantos resultados retornar (1-20)
         request.min_similarity: Similaridade mínima (0-1)
 
     Returns:
@@ -59,6 +61,7 @@ async def semantic_search(
         top_k=request.top_k,
         document_id=request.document_id,
         min_similarity=request.min_similarity,
+        user_id=user_id,
     )
 
     return [

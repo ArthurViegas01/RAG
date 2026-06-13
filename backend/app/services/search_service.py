@@ -145,13 +145,14 @@ class SearchService:
         top_k: int = 8,
         document_id: UUID | None = None,
         min_similarity: float = 0.2,
+        user_id: str = "",
     ) -> list:
         semantic_results = await SearchService._semantic_search(
             db, query, top_k=top_k * 2, document_id=document_id,
-            min_similarity=min_similarity,
+            min_similarity=min_similarity, user_id=user_id,
         )
         keyword_results = await SearchService._keyword_search(
-            db, query, top_k=top_k * 2, document_id=document_id,
+            db, query, top_k=top_k * 2, document_id=document_id, user_id=user_id,
         )
         fused = SearchService._fuse_rrf(semantic_results, keyword_results, top_k=top_k)
         if fused:
@@ -164,10 +165,10 @@ class SearchService:
         return fused
 
     @staticmethod
-    async def _semantic_search(db, query, top_k, document_id, min_similarity):
+    async def _semantic_search(db, query, top_k, document_id, min_similarity, user_id: str = ""):
         embedding_service = get_embedding_service()
         query_vector = embedding_service.embed(query)
-        base_filter = [Chunk.embedding.is_not(None)]
+        base_filter = [Chunk.embedding.is_not(None), Document.user_id == user_id]
         if document_id:
             base_filter.append(Chunk.document_id == document_id)
         stmt = (
@@ -175,6 +176,7 @@ class SearchService:
                 Chunk,
                 (1 - Chunk.embedding.cosine_distance(query_vector)).label("similarity"),
             )
+            .join(Document, Document.id == Chunk.document_id)
             .where(*base_filter)
             .order_by(Chunk.embedding.cosine_distance(query_vector))
             .limit(top_k)
@@ -187,7 +189,7 @@ class SearchService:
         ]
 
     @staticmethod
-    async def _keyword_search(db, query, top_k, document_id):
+    async def _keyword_search(db, query, top_k, document_id, user_id: str = ""):
         keywords = _extract_keywords(query)
         if not keywords:
             return []
@@ -199,8 +201,12 @@ class SearchService:
             phrase = phrase.strip()
             if len(phrase) < 2:
                 continue
-            cond_parts = ["c.embedding IS NOT NULL", "c.content ILIKE :kw"]
-            params = {"kw": "%" + phrase + "%", "limit": top_k}
+            cond_parts = [
+                "c.embedding IS NOT NULL",
+                "c.content ILIKE :kw",
+                "d.user_id = :user_id",
+            ]
+            params = {"kw": "%" + phrase + "%", "limit": top_k, "user_id": user_id}
             if document_id:
                 cond_parts.append("c.document_id = :doc_id")
                 params["doc_id"] = str(document_id)
@@ -208,6 +214,7 @@ class SearchService:
             sql = text(
                 "SELECT c.id, c.document_id, c.content, c.chunk_index, "
                 "0.85 AS similarity FROM chunks c "
+                "INNER JOIN documents d ON d.id = c.document_id "
                 "WHERE " + where_clause + " ORDER BY c.chunk_index LIMIT :limit"
             )
             rows = (await db.execute(sql, params)).fetchall()
@@ -218,8 +225,12 @@ class SearchService:
 
         # Pass 1: individual keywords ILIKE
         for kw in keywords:
-            cond_parts = ["c.embedding IS NOT NULL", "c.content ILIKE :kw"]
-            params = {"kw": "%" + kw + "%", "limit": top_k}
+            cond_parts = [
+                "c.embedding IS NOT NULL",
+                "c.content ILIKE :kw",
+                "d.user_id = :user_id",
+            ]
+            params = {"kw": "%" + kw + "%", "limit": top_k, "user_id": user_id}
             if document_id:
                 cond_parts.append("c.document_id = :doc_id")
                 params["doc_id"] = str(document_id)
@@ -227,6 +238,7 @@ class SearchService:
             sql = text(
                 "SELECT c.id, c.document_id, c.content, c.chunk_index, "
                 "0.7 AS similarity FROM chunks c "
+                "INNER JOIN documents d ON d.id = c.document_id "
                 "WHERE " + where_clause + " ORDER BY c.chunk_index LIMIT :limit"
             )
             rows = (await db.execute(sql, params)).fetchall()
@@ -239,8 +251,12 @@ class SearchService:
         ts_query_str = " | ".join(keywords)
         tsvec_cond = "to_tsvector('portuguese', c.content) @@ to_tsquery('portuguese', :tsq)"
         try:
-            cond_parts = ["c.embedding IS NOT NULL", tsvec_cond]
-            params = {"tsq": ts_query_str, "limit": top_k}
+            cond_parts = [
+                "c.embedding IS NOT NULL",
+                tsvec_cond,
+                "d.user_id = :user_id",
+            ]
+            params = {"tsq": ts_query_str, "limit": top_k, "user_id": user_id}
             if document_id:
                 cond_parts.append("c.document_id = :doc_id")
                 params["doc_id"] = str(document_id)
@@ -249,7 +265,9 @@ class SearchService:
                 "SELECT c.id, c.document_id, c.content, c.chunk_index, "
                 "ts_rank(to_tsvector('portuguese', c.content), "
                 "to_tsquery('portuguese', :tsq)) AS similarity "
-                "FROM chunks c WHERE " + where_clause + " ORDER BY similarity DESC LIMIT :limit"
+                "FROM chunks c "
+                "INNER JOIN documents d ON d.id = c.document_id "
+                "WHERE " + where_clause + " ORDER BY similarity DESC LIMIT :limit"
             )
             rows = (await db.execute(sql, params)).fetchall()
             for row in rows:

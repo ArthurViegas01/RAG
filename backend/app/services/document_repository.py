@@ -56,10 +56,23 @@ class DocumentRepository:
 
     @staticmethod
     async def get_by_id_with_chunks(db: AsyncSession, doc_id: UUID) -> Document | None:
-        """Busca documento com seus chunks."""
+        """Busca documento com seus chunks (sem filtro de usuário — uso interno)."""
         stmt = (
             select(Document)
             .where(Document.id == doc_id)
+            .options(selectinload(Document.chunks))
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id_with_chunks_for_user(
+        db: AsyncSession, doc_id: UUID, user_id: str
+    ) -> Document | None:
+        """Busca documento com seus chunks verificando propriedade do usuário."""
+        stmt = (
+            select(Document)
+            .where(Document.id == doc_id, Document.user_id == user_id)
             .options(selectinload(Document.chunks))
         )
         result = await db.execute(stmt)

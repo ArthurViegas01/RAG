@@ -231,6 +231,7 @@ class ChatService:
         question: str,
         document_id: UUID | None = None,
         top_k: int = 5,
+        user_id: str = "",
     ) -> ChatResult:
         results = await SearchService.search(
             db=db,
@@ -238,6 +239,7 @@ class ChatService:
             top_k=top_k,
             document_id=document_id,
             min_similarity=settings.min_similarity,
+            user_id=user_id,
         )
 
         if not results:
