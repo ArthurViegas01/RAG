@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     max_user_uploads_per_day: int = 20
     max_user_upload_bytes_per_day: int = 500 * 1024 * 1024  # 500 MB
 
+    # Limites de parsing (proteção contra decompression/XML bomb)
+    max_pdf_pages: int = 2000
+    max_uncompressed_bytes: int = 200 * 1024 * 1024  # 200 MB descomprimido
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

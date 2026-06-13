@@ -72,18 +72,27 @@ class TestDocumentChunker:
 # DocumentParser — PDF
 # ---------------------------------------------------------------------------
 
+def _make_mock_pdf(pages_text: list[str]) -> MagicMock:
+    """Cria um mock de fitz.Document com page_count e iteracao configurados."""
+    pages = []
+    for t in pages_text:
+        p = MagicMock()
+        p.get_text.return_value = t
+        pages.append(p)
+    mock_pdf = MagicMock()
+    mock_pdf.page_count = len(pages)
+    mock_pdf.__iter__ = MagicMock(return_value=iter(pages))
+    mock_pdf.close = MagicMock()
+    return mock_pdf
+
+
 class TestDocumentParserPDF:
     """Testa parse de PDF com fitz mockado."""
 
     def test_parse_pdf_returns_text(self):
         from app.services.document_processor import DocumentParser
 
-        mock_page = MagicMock()
-        mock_page.get_text.return_value = "Conteudo da pagina PDF."
-        mock_pdf = MagicMock()
-        mock_pdf.__iter__ = MagicMock(return_value=iter([mock_page]))
-        mock_pdf.close = MagicMock()
-
+        mock_pdf = _make_mock_pdf(["Conteudo da pagina PDF."])
         with patch("fitz.open", return_value=mock_pdf):
             result = DocumentParser.parse_pdf("fake.pdf")
 
@@ -92,13 +101,7 @@ class TestDocumentParserPDF:
     def test_parse_pdf_multiple_pages(self):
         from app.services.document_processor import DocumentParser
 
-        pages = [MagicMock(), MagicMock()]
-        pages[0].get_text.return_value = "Pagina 1."
-        pages[1].get_text.return_value = "Pagina 2."
-        mock_pdf = MagicMock()
-        mock_pdf.__iter__ = MagicMock(return_value=iter(pages))
-        mock_pdf.close = MagicMock()
-
+        mock_pdf = _make_mock_pdf(["Pagina 1.", "Pagina 2."])
         with patch("fitz.open", return_value=mock_pdf):
             result = DocumentParser.parse_pdf("fake.pdf")
 
@@ -108,22 +111,38 @@ class TestDocumentParserPDF:
     def test_parse_pdf_joins_pages_with_newline(self):
         from app.services.document_processor import DocumentParser
 
-        pages = [MagicMock(), MagicMock()]
-        pages[0].get_text.return_value = "A"
-        pages[1].get_text.return_value = "B"
-        mock_pdf = MagicMock()
-        mock_pdf.__iter__ = MagicMock(return_value=iter(pages))
-        mock_pdf.close = MagicMock()
-
+        mock_pdf = _make_mock_pdf(["A", "B"])
         with patch("fitz.open", return_value=mock_pdf):
             result = DocumentParser.parse_pdf("fake.pdf")
 
         assert result == "A\nB"
 
+    def test_parse_pdf_raises_if_too_many_pages(self):
+        from app.services.document_processor import DocumentParser
+        from app.config import settings
+
+        mock_pdf = MagicMock()
+        mock_pdf.page_count = settings.max_pdf_pages + 1
+        mock_pdf.close = MagicMock()
+        with patch("fitz.open", return_value=mock_pdf):
+            with pytest.raises(ValueError, match="limite"):
+                DocumentParser.parse_pdf("gigante.pdf")
+
 
 # ---------------------------------------------------------------------------
 # DocumentParser — DOCX
 # ---------------------------------------------------------------------------
+
+def _mock_zipfile(uncompressed_bytes: int = 100):
+    """Retorna um context manager mock para zipfile.ZipFile."""
+    mock_info = MagicMock()
+    mock_info.file_size = uncompressed_bytes
+    mock_zf = MagicMock()
+    mock_zf.__enter__ = MagicMock(return_value=mock_zf)
+    mock_zf.__exit__ = MagicMock(return_value=False)
+    mock_zf.infolist.return_value = [mock_info]
+    return mock_zf
+
 
 class TestDocumentParserDOCX:
     """Testa parse de DOCX com python-docx mockado."""
@@ -138,7 +157,8 @@ class TestDocumentParserDOCX:
         mock_doc = MagicMock()
         mock_doc.paragraphs = [para1, para2]
 
-        with patch("app.services.document_processor.DocxDocument", return_value=mock_doc):
+        with patch("app.services.document_processor.zipfile.ZipFile", return_value=_mock_zipfile()), \
+             patch("app.services.document_processor.DocxDocument", return_value=mock_doc):
             result = DocumentParser.parse_docx("fake.docx")
 
         assert "Paragrafo um." in result
@@ -154,10 +174,20 @@ class TestDocumentParserDOCX:
         mock_doc = MagicMock()
         mock_doc.paragraphs = [para1, para2]
 
-        with patch("app.services.document_processor.DocxDocument", return_value=mock_doc):
+        with patch("app.services.document_processor.zipfile.ZipFile", return_value=_mock_zipfile()), \
+             patch("app.services.document_processor.DocxDocument", return_value=mock_doc):
             result = DocumentParser.parse_docx("fake.docx")
 
         assert result == "X\nY"
+
+    def test_parse_docx_raises_if_zip_bomb(self):
+        from app.services.document_processor import DocumentParser
+        from app.config import settings
+
+        huge = settings.max_uncompressed_bytes + 1
+        with patch("app.services.document_processor.zipfile.ZipFile", return_value=_mock_zipfile(huge)):
+            with pytest.raises(ValueError, match="limite"):
+                DocumentParser.parse_docx("bomb.docx")
 
 
 # ---------------------------------------------------------------------------
