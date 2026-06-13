@@ -6,7 +6,7 @@ import os
 from uuid import UUID
 
 import redis as redis_lib
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id
@@ -14,6 +14,7 @@ from app.celery_app import celery_app
 from app.config import settings
 from app.database import get_db
 from app.models import DocumentStatus
+from app.rate_limit import limiter
 from app.schemas import DocumentDetailResponse, DocumentResponse
 from app.services import DocumentRepository
 from app.tasks import process_document
@@ -49,7 +50,9 @@ def _delete_file(doc_id: str) -> None:
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     response: Response = None,
