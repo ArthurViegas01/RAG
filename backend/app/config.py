@@ -49,7 +49,10 @@ class Settings(BaseSettings):
 
         if not self.db_is_local and "sslmode" not in url:
             sep = "&" if "?" in url else "?"
-            url += f"{sep}sslmode=require"
+            if self.db_ca_cert_path:
+                url += f"{sep}sslmode=verify-full&sslrootcert={self.db_ca_cert_path}"
+            else:
+                url += f"{sep}sslmode=require"
 
         return url
 
@@ -108,6 +111,13 @@ class Settings(BaseSettings):
     # Upload
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 50
+
+    # TLS do banco de dados
+    # Em prod (Railway): obter o certificado CA no painel do banco e definir
+    # DB_CA_CERT_PATH apontando para o arquivo salvo como secret.
+    # Sem este caminho a conexao usa a CA bundle do sistema (aceitavel para
+    # provedores com certificados Let's Encrypt / CA reconhecidas).
+    db_ca_cert_path: str = ""
 
     # Auth — JWT HS256
     # Em produção defina JWT_SECRET via variável de ambiente (Railway / .env)
