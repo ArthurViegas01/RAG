@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     # Em produção defina JWT_SECRET via variável de ambiente (Railway / .env)
     jwt_secret: str = "dev-secret-insecure-change-in-prod"
 
+    # Cota de upload por tenant (janela deslizante de 24h)
+    max_user_uploads_per_day: int = 20
+    max_user_upload_bytes_per_day: int = 500 * 1024 * 1024  # 500 MB
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
