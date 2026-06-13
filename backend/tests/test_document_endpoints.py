@@ -237,8 +237,4 @@ class TestHealthEndpoint:
 
     def test_response_has_status_field(self, client):
         data = client.get("/health").json()
-        assert data["status"] == "healthy"
-
-    def test_response_has_version(self, client):
-        data = client.get("/health").json()
-        assert "version" in data
+        assert data["status"] == "ok"

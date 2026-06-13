@@ -5,7 +5,6 @@ Entry point da aplicação FastAPI.
 import logging
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -95,34 +94,4 @@ app.include_router(chat_router)
 
 @app.get("/health")
 async def health_check():
-    provider = settings.llm_provider.lower()
-
-    if provider == "groq":
-        llm_model = settings.groq_model
-    elif provider == "openai":
-        llm_model = settings.openai_model
-    else:
-        llm_model = settings.ollama_model
-
-    result = {
-        "status": "healthy",
-        "version": "0.1.0",
-        "embedding_model": settings.embedding_model,
-        "llm_provider": provider,
-        "llm_model": llm_model,
-    }
-
-    if provider == "ollama":
-        ollama_ok = False
-        ollama_error = None
-        try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                r = await client.get(f"{settings.ollama_base_url}/api/tags")
-                ollama_ok = r.status_code == 200
-        except Exception as exc:
-            ollama_error = str(exc)
-        result["ollama_reachable"] = ollama_ok
-        if ollama_error:
-            result["ollama_error"] = ollama_error
-
-    return result
+    return {"status": "ok"}
