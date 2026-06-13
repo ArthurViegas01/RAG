@@ -49,6 +49,12 @@ def _delete_file(doc_id: str) -> None:
     _get_redis().delete(_file_key(doc_id))
 
 
+def _sanitize_filename(raw: str) -> str:
+    name = os.path.basename(raw or "upload")
+    name = name.replace("\n", " ").replace("\r", " ").replace("\x00", "")
+    return name[:255] or "upload"
+
+
 _QUOTA_TTL = 24 * 3600  # janela deslizante de 24h para cotas
 
 
@@ -106,8 +112,9 @@ async def upload_document(
     response: Response = None,
     user_id: str = Depends(get_current_user_id),
 ):
+    safe_filename = _sanitize_filename(file.filename or "")
     allowed_extensions = {".pdf", ".docx"}
-    file_ext = os.path.splitext(file.filename)[1].lower()
+    file_ext = os.path.splitext(safe_filename)[1].lower()
 
     if file_ext not in allowed_extensions:
         raise HTTPException(
@@ -115,7 +122,7 @@ async def upload_document(
             detail=f"Tipo de arquivo não suportado. Aceitos: {allowed_extensions}",
         )
 
-    existing_count = await DocumentRepository.count_by_filename(db, file.filename, user_id)
+    existing_count = await DocumentRepository.count_by_filename(db, safe_filename, user_id)
     if existing_count > 0 and response is not None:
         response.headers["X-Duplicate-Warning"] = (
             f"Duplicate: {existing_count} document(s) with this name already exist."
@@ -142,8 +149,8 @@ async def upload_document(
 
     doc = await DocumentRepository.create(
         db=db,
-        filename=file.filename,
-        file_path=file.filename,
+        filename=safe_filename,
+        file_path=safe_filename,
         file_size_bytes=file_size_bytes,
         user_id=user_id,
     )
