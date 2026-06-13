@@ -169,18 +169,54 @@ pytest tests/test_chunking.py tests/test_upload_endpoint.py tests/test_document_
 pytest -m integration -v
 ```
 
-## Authentication
+## Security
 
-All API endpoints require a bearer token. Obtain one before any other call:
+### Authentication and multi-tenant isolation
+
+All API endpoints require a bearer token:
 
 ```bash
 curl -X POST https://<your-api>/api/auth/token
 # {"access_token": "eyJ...", "token_type": "bearer"}
 ```
 
-Pass it as `Authorization: Bearer <token>` on every subsequent request. The frontend handles this automatically — tokens are stored in `localStorage` and refreshed transparently.
+Pass it as `Authorization: Bearer <token>` on every subsequent request. The frontend handles this automatically.
 
-Tokens are self-contained JWTs signed with `JWT_SECRET` (HS256, 1-year TTL). There are no user accounts or passwords: each browser session gets its own identity, and documents are scoped to that identity. Legacy localStorage UUIDs can be migrated by passing `user_id` in the token request body.
+Tokens are self-contained JWTs signed with `JWT_SECRET` (HS256, 1-year TTL). There are no user accounts or passwords: each browser session gets its own identity. Every query — semantic search, keyword search, document listing, and ownership checks — is scoped to the authenticated `user_id`. Documents belonging to another user return 404, not 403, to avoid confirming existence.
+
+Legacy `localStorage` UUIDs can be migrated by passing `user_id` in the token request body.
+
+### Rate limiting and upload quotas
+
+- Upload: 10 requests/hour per IP; per-tenant daily quota of 20 files or 500 MB (24-hour rolling window, stored in Redis).
+- Search: 30 requests/minute per IP.
+- Chat: 10 requests/minute per IP.
+
+Requests that exceed the rate limit return 429. Requests that exceed the upload quota also return 429.
+
+The `Content-Length` header is checked before reading the request body, so oversized uploads are rejected without materialising in memory.
+
+### Document parsing protections
+
+- PDF: capped at 2 000 pages and 200 MB of extracted text per file.
+- DOCX: the zip is inspected before decompression; total uncompressed size must be under 200 MB. Both limits protect the worker against decompression bombs.
+
+### Prompt injection mitigations
+
+Document content is wrapped in `<<<DOCUMENTO_INICIO>>>` / `<<<DOCUMENTO_FIM>>>` delimiters in every prompt, and the system prompt instructs the model to treat content between those markers as data, not instructions. Filenames are sanitised (newlines stripped, truncated to 255 chars) before being stored or included in prompts.
+
+### Transport and headers
+
+- PostgreSQL connection uses `ssl.create_default_context()` (`CERT_REQUIRED` + `check_hostname=True`). Supply `DB_CA_CERT_PATH` to pin the provider's CA certificate.
+- Netlify serves the frontend with `Strict-Transport-Security`, `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy`.
+- CORS is restricted to the explicit origin list in `CORS_ORIGINS`. The app refuses to start if that list contains `*`.
+
+### Production checklist
+
+- Set `JWT_SECRET` to a random value: `openssl rand -hex 32`.
+- Set `CORS_ORIGINS` to the exact frontend URL (e.g. `https://yourapp.netlify.app`).
+- Provide `DB_CA_CERT_PATH` if your PostgreSQL provider supplies a CA certificate.
+- Never commit `.env` to version control.
 
 ## Key decisions
 
