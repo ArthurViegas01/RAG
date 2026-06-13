@@ -144,13 +144,18 @@ cd frontend && npm install && npm run dev
 |---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://raguser:ragpass123@localhost:5432/ragdb` | PostgreSQL connection |
 | `REDIS_URL` | `redis://localhost:6379/0` | Celery broker |
+| `JWT_SECRET` | *(insecure default)* | HS256 signing key — set a random value in production (`openssl rand -hex 32`) |
 | `LLM_PROVIDER` | `groq` | `groq`, `ollama`, or `openai` |
 | `GROQ_API_KEY` | — | Free key at console.groq.com |
 | `GROQ_MODEL` | `llama-3.1-8b-instant` | Groq model |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Local embedding model |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed origins (no wildcards) |
 | `CHUNK_SIZE` | `800` | Max characters per chunk |
 | `CHUNK_OVERLAP` | `150` | Overlap between adjacent chunks |
 | `DEFAULT_TOP_K` | `8` | Chunks returned per query |
+| `MAX_USER_UPLOADS_PER_DAY` | `20` | Per-tenant upload count quota (24 h rolling window) |
+| `MAX_USER_UPLOAD_BYTES_PER_DAY` | `524288000` | Per-tenant upload size quota in bytes (500 MB) |
+| `DB_CA_CERT_PATH` | — | Path to the PostgreSQL CA certificate for TLS verification (Railway: save the cert as a secret file) |
 
 ### Tests
 
@@ -163,6 +168,19 @@ pytest tests/test_chunking.py tests/test_upload_endpoint.py tests/test_document_
 # Integration tests (requires PostgreSQL, Redis, and an LLM provider running)
 pytest -m integration -v
 ```
+
+## Authentication
+
+All API endpoints require a bearer token. Obtain one before any other call:
+
+```bash
+curl -X POST https://<your-api>/api/auth/token
+# {"access_token": "eyJ...", "token_type": "bearer"}
+```
+
+Pass it as `Authorization: Bearer <token>` on every subsequent request. The frontend handles this automatically — tokens are stored in `localStorage` and refreshed transparently.
+
+Tokens are self-contained JWTs signed with `JWT_SECRET` (HS256, 1-year TTL). There are no user accounts or passwords: each browser session gets its own identity, and documents are scoped to that identity. Legacy localStorage UUIDs can be migrated by passing `user_id` in the token request body.
 
 ## Key decisions
 
