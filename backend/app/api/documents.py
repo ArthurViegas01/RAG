@@ -49,6 +49,54 @@ def _delete_file(doc_id: str) -> None:
     _get_redis().delete(_file_key(doc_id))
 
 
+_QUOTA_TTL = 24 * 3600  # janela deslizante de 24h para cotas
+
+
+def _quota_key_count(user_id: str) -> str:
+    return f"quota:uploads:{user_id}"
+
+
+def _quota_key_bytes(user_id: str) -> str:
+    return f"quota:bytes:{user_id}"
+
+
+def _check_and_record_upload_quota(user_id: str, file_size_bytes: int) -> None:
+    """Verifica e registra cota de uploads do tenant. Levanta ValueError se excedida."""
+    r = _get_redis()
+    count_key = _quota_key_count(user_id)
+    bytes_key = _quota_key_bytes(user_id)
+
+    pipe = r.pipeline()
+    pipe.get(count_key)
+    pipe.get(bytes_key)
+    current_count_raw, current_bytes_raw = pipe.execute()
+
+    current_count = int(current_count_raw or 0)
+    current_bytes = int(current_bytes_raw or 0)
+
+    if current_count >= settings.max_user_uploads_per_day:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Limite de {settings.max_user_uploads_per_day} uploads por dia atingido. "
+                "Aguarde a janela de 24h reiniciar."
+            ),
+        )
+    if current_bytes + file_size_bytes > settings.max_user_upload_bytes_per_day:
+        limit_mb = settings.max_user_upload_bytes_per_day // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Limite de {limit_mb} MB de uploads por dia atingido.",
+        )
+
+    pipe = r.pipeline()
+    pipe.incr(count_key)
+    pipe.incrby(bytes_key, file_size_bytes)
+    pipe.expire(count_key, _QUOTA_TTL)
+    pipe.expire(bytes_key, _QUOTA_TTL)
+    pipe.execute()
+
+
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/hour")
 async def upload_document(
@@ -82,6 +130,8 @@ async def upload_document(
             status_code=413,
             detail=f"File too large. Maximum: {settings.max_file_size_mb}MB",
         )
+
+    _check_and_record_upload_quota(user_id, file_size_bytes)
 
     doc = await DocumentRepository.create(
         db=db,

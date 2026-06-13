@@ -8,7 +8,7 @@ as dependencias pesadas (sentence-transformers, asyncpg, pgvector).
 
 import sys
 import os
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -52,6 +52,15 @@ def disable_rate_limiter():
     limiter.enabled = False
     yield
     limiter.enabled = True
+
+
+# ── Cota de upload: sem Redis em unit tests ───────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def mock_upload_quota():
+    """Pula verificacao de cota de upload (requer Redis nao disponivel em unit tests)."""
+    with patch("app.api.documents._check_and_record_upload_quota"):
+        yield
 
 
 # ── Configuracao de event loop ────────────────────────────────────────────────
