@@ -121,10 +121,17 @@ async def upload_document(
             f"Duplicate: {existing_count} document(s) with this name already exist."
         )
 
+    max_bytes = settings.max_file_size_mb * 1024 * 1024
+    cl = request.headers.get("content-length")
+    if cl and int(cl) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum: {settings.max_file_size_mb}MB",
+        )
+
     file_content = await file.read()
     file_size_bytes = len(file_content)
 
-    max_bytes = settings.max_file_size_mb * 1024 * 1024
     if file_size_bytes > max_bytes:
         raise HTTPException(
             status_code=413,
