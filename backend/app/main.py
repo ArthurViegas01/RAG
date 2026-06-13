@@ -8,12 +8,15 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import update
 
 from app.api import auth_router, documents_router, search_router, chat_router
 from app.config import settings
 from app.database import AsyncSessionLocal, init_db
 from app.models import Document, DocumentStatus
+from app.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(

@@ -32,4 +32,7 @@ python-dotenv==1.0.1
 # === Auth ===
 PyJWT==2.10.1               # Verificação de tokens JWT (sem dependências criptográficas pesadas)
 
+# === Rate limiting ===
+slowapi==0.1.9              # Rate limiting para FastAPI (baseado em limits)
+
 # Dependências de desenvolvimento/teste ficam em requirements.dev.txt

@@ -43,6 +43,17 @@ _mock_st_model.get_sentence_embedding_dimension.return_value = 384
 sys.modules["sentence_transformers"].SentenceTransformer.return_value = _mock_st_model
 
 
+# ── Rate limiter: desativado em unit tests ────────────────────────────────────
+
+@pytest.fixture(autouse=True, scope="session")
+def disable_rate_limiter():
+    """Desativa o slowapi limiter para evitar 429 em unit tests."""
+    from app.rate_limit import limiter
+    limiter.enabled = False
+    yield
+    limiter.enabled = True
+
+
 # ── Configuracao de event loop ────────────────────────────────────────────────
 
 @pytest.fixture(scope="session")
