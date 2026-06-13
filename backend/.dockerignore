@@ -1,0 +1,25 @@
+# Model cache — downloaded at runtime via fastembed, too large for build context
+models/
+
+# Python artifacts
+__pycache__/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+
+# Test and coverage artifacts
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Local env
+.venv
+venv
+.env
+*.env.local
+
+# Uploads
+uploads/

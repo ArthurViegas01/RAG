@@ -9,6 +9,8 @@ frontend/.vite
 
 # Dados e uploads locais
 backend/uploads/
+models/
+backend/models/
 *.db
 *.sqlite
 
