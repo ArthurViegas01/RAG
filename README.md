@@ -142,7 +142,7 @@ cd frontend && npm install && npm run dev
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://raguser:ragpass123@localhost:5432/ragdb` | PostgreSQL connection |
+| `DATABASE_URL` | `postgresql+asyncpg://user:password@localhost:5432/ragdb` | PostgreSQL connection |
 | `REDIS_URL` | `redis://localhost:6379/0` | Celery broker |
 | `JWT_SECRET` | *(insecure default)* | HS256 signing key — set a random value in production (`openssl rand -hex 32`) |
 | `LLM_PROVIDER` | `groq` | `groq`, `ollama`, or `openai` |
