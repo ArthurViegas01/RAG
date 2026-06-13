@@ -71,12 +71,20 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
+if "*" in _cors_origins:
+    raise RuntimeError(
+        "CORS_ORIGINS='*' com allow_credentials=True e inseguro: "
+        "o Starlette refletiria qualquer Origin, permitindo roubo de sessao. "
+        "Defina origens explicitas (ex: https://meuapp.netlify.app)."
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(auth_router)
